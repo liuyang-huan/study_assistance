@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { getJournalHistory } from '../services/api'
 import axios from 'axios'
 
-const http = axios.create({ baseURL: '/api' })
+const http = axios.create({ baseURL: 'http://localhost:8000/api' })
 
 export default function HistoryPage() {
   const { id } = useParams<{ id: string }>()

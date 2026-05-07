@@ -1,7 +1,7 @@
 import axios from 'axios'
 import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQuestion, LearningStats } from '../types'
 
-const http = axios.create({ baseURL: '/api' })
+const http = axios.create({ baseURL: 'http://localhost:8000/api' })
 
 // 学习目标
 export const getGoals = () => http.get<LearningGoal[]>('/goals').then(r => r.data)
