@@ -1,1 +1,9 @@
 .claude/
+node_modules/
+dist/
+.env
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+data/*.db
