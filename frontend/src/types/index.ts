@@ -88,3 +88,28 @@ export interface GoalDetail extends LearningGoal {
   today_questions: DailyQuestion[]
   today_journal: JournalEntry | null
 }
+
+export interface PhaseProgress {
+  phase: number
+  title: string
+  total_days: number
+  completed_days: number
+  percent: number
+}
+
+export interface LearningStats {
+  total_study_days: number
+  streak: number
+  studied_today: boolean
+  total_minutes: number
+  completed_plans: number
+  total_questions: number
+  answered_questions: number
+  avg_score: number
+  score_trend: { date: string; score: number }[]
+  phase_progress: PhaseProgress[]
+  overall_percent: number
+  current_phase: PhaseProgress | null
+  study_trend: { date: string; minutes: number }[]
+  topics_covered: { date: string; type: string; content: string; reflection?: string; score?: number }[]
+}

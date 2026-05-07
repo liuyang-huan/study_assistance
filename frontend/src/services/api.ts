@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQuestion } from '../types'
+import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQuestion, LearningStats } from '../types'
 
 const http = axios.create({ baseURL: '/api' })
 
@@ -41,3 +41,7 @@ export const generateQuestions = (goalId: number) =>
   http.post<DailyQuestion[]>(`/goals/${goalId}/questions/generate`).then(r => r.data)
 export const submitAnswer = (questionId: number, answer: string) =>
   http.post(`/questions/${questionId}/answer`, { answer }).then(r => r.data)
+
+// 学习统计
+export const getStats = (goalId: number) =>
+  http.get<LearningStats>(`/goals/${goalId}/stats`).then(r => r.data)

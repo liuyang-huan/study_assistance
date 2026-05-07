@@ -4,6 +4,7 @@ import {
   getGoal, generateRoadmap, generatePlan, completePlan,
   generateQuestions, submitAnswer, saveJournal, getPlans, getQuestions,
 } from '../services/api'
+import StatsPanel from '../components/StatsPanel'
 import type { GoalDetail as GoalDetailType } from '../types'
 
 function todayStr() {
@@ -184,6 +185,8 @@ export default function GoalDetail() {
       </div>
 
       {error && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm">{error}</div>}
+
+      <StatsPanel goalId={+id!} />
 
       {/* 学习路线 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-5">
