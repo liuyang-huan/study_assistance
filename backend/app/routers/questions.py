@@ -7,11 +7,65 @@ from ..database import get_db
 from ..models.goal import LearningGoal
 from ..models.roadmap import Roadmap
 from ..models.question import DailyQuestion, UserAnswer
+from ..models.journal import JournalEntry
 from ..schemas.api import AnswerSubmit, QuestionResponse, AnswerResponse
 from ..services.ai_service import chat_json
-from ..services.prompt_templates import generate_questions, evaluate_answer
+from ..services.prompt_templates import generate_questions, evaluate_answer, adjust_roadmap
 
 router = APIRouter(prefix='/api', tags=['questions'])
+
+
+def _should_adjust(db: Session, goal_id: int, this_need_adjust: bool = False) -> bool:
+    """判断是否需要调整路线：AI 建议 or 连续低分"""
+    if this_need_adjust:
+        return True
+    recent = db.query(UserAnswer).join(DailyQuestion).filter(
+        DailyQuestion.goal_id == goal_id
+    ).order_by(UserAnswer.created_at.desc()).limit(5).all()
+    scores = [a.score for a in recent if a.score is not None]
+    if len(scores) >= 3 and sum(scores) / len(scores) < 5:
+        return True
+    return False
+
+
+def _auto_adjust_roadmap(db: Session, goal_id: int, goal_title: str):
+    """自动调整学习路线"""
+    # 获取当前路线
+    current_rm = db.query(Roadmap).filter(
+        Roadmap.goal_id == goal_id, Roadmap.is_active == True
+    ).order_by(Roadmap.version.desc()).first()
+    if not current_rm:
+        return None
+
+    # 获取近期日志和评估
+    recent_journals = db.query(JournalEntry).filter(
+        JournalEntry.goal_id == goal_id
+    ).order_by(JournalEntry.date.desc()).limit(5).all()
+    journal_text = '\n'.join([f'{j.date}: {j.reflection or j.content[:200]}' for j in recent_journals])
+
+    recent_answers = db.query(UserAnswer).join(DailyQuestion).filter(
+        DailyQuestion.goal_id == goal_id
+    ).order_by(UserAnswer.created_at.desc()).limit(5).all()
+    scores = [a.score for a in recent_answers if a.score is not None]
+    weak_text = f'最近{len(scores)}次答题平均分{sum(scores)/len(scores):.1f}/10' if scores else ''
+
+    try:
+        result = chat_json([{'role': 'user', 'content': adjust_roadmap(
+            current_roadmap=current_rm.content[:5000],
+            goal_title=goal_title,
+            progress_summary=journal_text,
+            weak_points=weak_text,
+            strengths='',
+        )}], temperature=0.3)
+    except Exception:
+        return None
+
+    # 旧版本标记失效
+    db.query(Roadmap).filter(Roadmap.goal_id == goal_id).update({'is_active': False})
+    new_version = current_rm.version + 1
+    new_rm = Roadmap(goal_id=goal_id, content=json.dumps(result, ensure_ascii=False), version=new_version)
+    db.add(new_rm)
+    return new_rm
 
 
 def _question_to_response(q: DailyQuestion) -> dict:
@@ -105,15 +159,26 @@ def submit_answer(question_id: int, data: AnswerSubmit, db: Session = Depends(ge
     db.add(answer)
 
     q.status = 'answered'
+    db.flush()
+
+    # 自动调整路线
+    was_adjusted = False
+    if _should_adjust(db, q.goal_id, evaluation.get('need_adjust', False)):
+        _auto_adjust_roadmap(db, q.goal_id, g.title if g else '')
+        was_adjusted = True
+
     db.commit()
     db.refresh(answer)
-    return {
+    result = {
         'id': answer.id, 'question_id': answer.question_id,
         'answer': answer.answer,
         'ai_evaluation': evaluation,
         'score': answer.score,
         'created_at': answer.created_at.isoformat(),
     }
+    if was_adjusted:
+        result['roadmap_adjusted'] = True
+    return result
 
 
 @router.get('/goals/{goal_id}/questions/history')
