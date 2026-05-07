@@ -1,2 +1,1 @@
-# study_assistance
-个人学习助手
+# 个人学习助手
