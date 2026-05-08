@@ -81,6 +81,28 @@ def evaluate_answer(goal_title: str, question: str, expected_answer: str, user_a
 {{"score": 8, "correctness": "评估说明", "depth": "理解深度", "suggestion": "学习建议", "need_adjust": false}}"""
 
 
+def generate_topic_materials(goal_title: str, topic_title: str, phase_context: str) -> str:
+    return f"""用户正在学习：{goal_title}。
+当前学习主题：{topic_title}
+所在阶段上下文：{phase_context}
+
+请为这个学习主题生成完整的学习材料，让用户可以直接点击学习。
+
+返回 JSON：
+{{
+  "title": "{topic_title}",
+  "duration_min": 45,
+  "detail": "一句话描述本主题",
+  "materials": {{
+    "summary": "本节概述（一句话）",
+    "key_concepts": [{{"name": "概念名", "explanation": "一两句话解释"}}],
+    "content": "详细的Markdown格式学习内容（300-800字），包含讲解、代码示例",
+    "example": "具体应用示例或代码演示",
+    "practice": "一道巩固练习题"
+  }}
+}}"""
+
+
 def adjust_roadmap(current_roadmap: str, goal_title: str, progress_summary: str,
                     weak_points: str = '', strengths: str = '') -> str:
     return f"""用户正在学习：{goal_title}。

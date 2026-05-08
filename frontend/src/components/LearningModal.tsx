@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   BookOpen, Clock, Lightbulb, Code, PenLine, X, Target,
-  Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Save, AlarmClock
+  Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Save, AlarmClock, Loader2
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -27,7 +27,18 @@ interface TaskInfo {
 
 function renderMarkdown(text: string) {
   if (!text) return null
-  const html = text
+
+  // 先处理表格（多行匹配）
+  let html = text.replace(/\n(\|.+\|)\n\|[-| :]+\|\n((?:\|.+\|\n?)+)/g, (_m: string, header: string, _sep: string, rows: string) => {
+    const hCells = header.split('|').filter(c => c.trim()).map(c => `<th class="px-3 py-2 text-left text-xs font-semibold text-gray-700 bg-gray-50 border-b border-gray-200">${c.trim()}</th>`).join('')
+    const rHtml = rows.trim().split('\n').map((row: string) => {
+      const cells = row.split('|').filter(c => c.trim()).map(c => `<td class="px-3 py-2 text-xs text-gray-600 border-b border-gray-100">${c.trim()}</td>`).join('')
+      return `<tr>${cells}</tr>`
+    }).join('')
+    return `\n<table class="w-full my-3 border border-gray-200 rounded-lg overflow-hidden"><thead><tr>${hCells}</tr></thead><tbody>${rHtml}</tbody></table>\n`
+  })
+
+  html = html
     .replace(/### (.+)/g, '<h3 class="text-base font-semibold text-gray-800 mt-4 mb-2">$1</h3>')
     .replace(/## (.+)/g, '<h2 class="text-lg font-semibold text-gray-900 mt-5 mb-2">$1</h2>')
     .replace(/# (.+)/g, '<h1 class="text-xl font-bold text-gray-900 mt-5 mb-2">$1</h1>')
@@ -51,10 +62,12 @@ export default function LearningModal({
   task,
   onClose,
   onRegenerate,
+  loading = false,
 }: {
   task: TaskInfo
   onClose: () => void
   onRegenerate?: () => void
+  loading?: boolean
 }) {
   const m = task.materials
   const [activeSection, setActiveSection] = useState<string>('summary')
@@ -212,17 +225,25 @@ export default function LearningModal({
         <div ref={contentRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-8 py-6">
           <div className="max-w-3xl mx-auto space-y-8">
             {!m ? (
-              <div className="text-center py-20">
-                <BookOpen size={56} className="mx-auto mb-5 text-gray-200" />
-                <p className="text-gray-500 font-medium mb-1">暂无学习材料</p>
-                <p className="text-gray-400 text-sm mb-6">此规划是旧版生成的，需重新生成以获取详细学习内容</p>
-                {onRegenerate && (
-                  <button onClick={() => { onClose(); onRegenerate() }}
-                    className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 cursor-pointer text-sm font-medium transition-all shadow-md shadow-indigo-200">
-                    重新生成今日规划
-                  </button>
-                )}
-              </div>
+              loading ? (
+                <div className="text-center py-20">
+                  <Loader2 size={48} className="mx-auto mb-5 text-indigo-400 animate-spin" />
+                  <p className="text-gray-500 font-medium mb-1">AI 正在生成学习材料...</p>
+                  <p className="text-gray-400 text-sm mb-6">请耐心等待，约需 10-30 秒</p>
+                </div>
+              ) : (
+                <div className="text-center py-20">
+                  <BookOpen size={56} className="mx-auto mb-5 text-gray-200" />
+                  <p className="text-gray-500 font-medium mb-1">暂无学习材料</p>
+                  <p className="text-gray-400 text-sm mb-6">此规划是旧版生成的，需重新生成以获取详细学习内容</p>
+                  {onRegenerate && (
+                    <button onClick={() => { onClose(); onRegenerate() }}
+                      className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 cursor-pointer text-sm font-medium transition-all shadow-md shadow-indigo-200">
+                      重新生成今日规划
+                    </button>
+                  )}
+                </div>
+              )
             ) : (
               <>
                 {/* 概述 */}

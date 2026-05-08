@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import {
   getGoal, generateRoadmap, generatePlan, completePlan,
   generateQuestions, submitAnswer, saveJournal, getPlans, getQuestions,
-  exportRoadmap, exportPlan, exportJournal, downloadBlob,
+  exportRoadmap, exportPlan, exportJournal, downloadBlob, learnTopic,
 } from '../services/api'
 import StatsPanel from '../components/StatsPanel'
 import LearningModal from '../components/LearningModal'
@@ -47,7 +47,27 @@ export default function GoalDetail() {
 
   const [actionLoading, setActionLoading] = useState('')
   const [selectedTask, setSelectedTask] = useState<any>(null)
+  const [modalLoading, setModalLoading] = useState(false)
   const [showGraph, setShowGraph] = useState(false)
+  const [topicLoading, setTopicLoading] = useState<number | null>(null)
+
+  // 已学习的主题天数（localStorage 持久化，突破每日规划限制）
+  const learnedKey = `learned-days-${id}`
+  const [learnedDays, setLearnedDays] = useState<Set<number>>(() => {
+    try {
+      const raw = localStorage.getItem(`learned-days-${id}`)
+      return raw ? new Set(JSON.parse(raw)) : new Set<number>()
+    } catch { return new Set<number>() }
+  })
+
+  const markLearned = (day: number) => {
+    setLearnedDays(prev => {
+      const next = new Set(prev)
+      next.add(day)
+      localStorage.setItem(learnedKey, JSON.stringify([...next]))
+      return next
+    })
+  }
 
   const loadGoal = async () => {
     if (!id) return
@@ -100,6 +120,33 @@ export default function GoalDetail() {
     await generateRoadmap(+id!)
     await loadGoal()
   })
+
+  const handleLearnTopic = async (topicDay: number, topicTitle: string) => {
+    setTopicLoading(topicDay)
+    setModalLoading(true)
+    setSelectedTask({
+      title: topicTitle,
+      duration_min: 30,
+      detail: 'AI 正在生成学习材料...',
+    })
+    try {
+      const materials = await learnTopic(+id!, topicDay)
+      markLearned(topicDay)
+      setModalLoading(false)
+      setSelectedTask({
+        title: materials.title || topicTitle,
+        duration_min: materials.duration_min || 30,
+        detail: materials.detail || '',
+        materials: materials.materials,
+      })
+    } catch (e) {
+      setError('生成学习材料失败，请稍后重试')
+      setModalLoading(false)
+      setSelectedTask(null)
+    } finally {
+      setTopicLoading(null)
+    }
+  }
 
   const handleGeneratePlan = () => doAction('生成规划', async () => {
     await generatePlan(+id!)
@@ -266,14 +313,32 @@ export default function GoalDetail() {
                   </div>
                 </summary>
                 <div className="px-4 pb-3 pl-14 space-y-1">
-                  {(p.topics || []).map((t: any) => (
-                    <div key={t.day} className="flex items-center gap-2 py-1.5 text-sm text-gray-600">
-                      <span className="w-6 h-6 rounded-lg bg-indigo-50 flex items-center justify-center text-[10px] font-mono text-indigo-500 shrink-0">
-                        {t.day}
-                      </span>
-                      <span>{t.title}</span>
-                    </div>
-                  ))}
+                  {(p.topics || []).map((t: any) => {
+                    const isLearned = learnedDays.has(t.day)
+                    return (
+                      <button
+                        type="button"
+                        key={t.day}
+                        onClick={() => handleLearnTopic(t.day, t.title)}
+                        disabled={topicLoading === t.day}
+                        className={`w-full flex items-center gap-2 py-1.5 text-sm rounded-lg px-2 cursor-pointer transition-colors disabled:opacity-50 ${
+                          isLearned
+                            ? 'bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100'
+                            : 'text-gray-600 hover:bg-indigo-50'
+                        }`}
+                      >
+                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-mono shrink-0 ${
+                          isLearned ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-50 text-indigo-500'
+                        }`}>
+                          {isLearned ? <CheckCircle2 size={11} /> : t.day}
+                        </span>
+                        <span className="text-left">{t.title}</span>
+                        {topicLoading === t.day && (
+                          <Loader2 size={12} className="animate-spin text-indigo-400 ml-auto shrink-0" />
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               </details>
             ))}
@@ -398,6 +463,123 @@ export default function GoalDetail() {
         )}
       </div>
 
+      {/* 继续学习 — 按路线顺序无限制学下去 */}
+      {isToday && phases.length > 0 && (() => {
+        const allTopics = phases.flatMap((p: any) => ({
+          ...p,
+          phaseTitle: p.title,
+          topics: p.topics || [],
+        }))
+        const flatTopics = phases.flatMap((p: any) => (p.topics || []).map((t: any) => ({
+          ...t,
+          phaseTitle: p.title,
+          phaseNum: p.phase,
+        })))
+        // 找到第一个未学过的主题
+        const nextTopic = flatTopics.find((t: any) => !learnedDays.has(t.day))
+        const totalTopics = flatTopics.length
+        const learnedCount = totalTopics - flatTopics.filter((t: any) => !learnedDays.has(t.day)).length
+        const progressPct = totalTopics > 0 ? Math.round((learnedCount / totalTopics) * 100) : 0
+
+        return (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
+            <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-4">
+              <Play size={18} className="text-emerald-500" />
+              继续学习
+              <span className="text-xs text-gray-400 font-normal">按路线顺序 • 无限制</span>
+            </h2>
+
+            {/* 进度条 */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-gray-500">
+                  路线进度：{learnedCount}/{totalTopics} 节
+                </span>
+                <span className="text-xs font-medium text-indigo-600">{progressPct}%</span>
+              </div>
+              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full transition-all duration-500"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+            </div>
+
+            {nextTopic ? (
+              <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-100">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-emerald-600 font-medium mb-1">
+                      Phase {nextTopic.phaseNum} · {nextTopic.phaseTitle}
+                    </p>
+                    <p className="text-sm font-semibold text-gray-900 mb-1">
+                      Day {nextTopic.day}：{nextTopic.title}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      点击开始学习本节内容，AI 将实时生成完整学习材料
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleLearnTopic(nextTopic.day, nextTopic.title)}
+                    disabled={topicLoading === nextTopic.day}
+                    className="shrink-0 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:from-emerald-600 hover:to-teal-700 disabled:opacity-50 cursor-pointer text-sm font-medium transition-all shadow-md shadow-emerald-200 flex items-center gap-2"
+                  >
+                    {topicLoading === nextTopic.day ? (
+                      <><Loader2 size={15} className="animate-spin" /> 生成中...</>
+                    ) : (
+                      <><Play size={15} /> 开始学习</>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <CheckCircle2 size={40} className="mx-auto mb-3 text-emerald-300" />
+                <p className="text-gray-500 font-medium mb-1">全部学完了！</p>
+                <p className="text-gray-400 text-sm mb-4">路线中所有 {totalTopics} 节内容都已完成</p>
+                <button
+                  onClick={() => {
+                    setLearnedDays(new Set())
+                    localStorage.removeItem(learnedKey)
+                  }}
+                  className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-xl cursor-pointer transition-colors"
+                >
+                  重置进度，重新来过
+                </button>
+              </div>
+            )}
+
+            {/* 已学列表（可折叠） */}
+            {learnedCount > 0 && (
+              <details className="mt-4 group">
+                <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-600 list-none flex items-center gap-1">
+                  已学 {learnedCount} 节
+                  <ChevronDown size={12} className="group-open:rotate-180 transition-transform" />
+                </summary>
+                <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+                  {flatTopics
+                    .filter((t: any) => learnedDays.has(t.day))
+                    .map((t: any) => (
+                      <button
+                        key={t.day}
+                        onClick={() => handleLearnTopic(t.day, t.title)}
+                        className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors flex items-center gap-2"
+                      >
+                        <span className="w-5 h-5 rounded bg-emerald-100 flex items-center justify-center text-[10px] font-mono text-emerald-600 shrink-0">
+                          {t.day}
+                        </span>
+                        {t.title}
+                        <span className="text-gray-300 ml-auto shrink-0">复习</span>
+                      </button>
+                    ))}
+                </div>
+              </details>
+            )}
+          </div>
+        )
+      })()}
+
       {/* 今日问题 */}
       {isToday && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
@@ -419,16 +601,10 @@ export default function GoalDetail() {
             </div>
           ) : (
             <div className="space-y-3">
-              {questions.map((q: any) => {
-                const evalData = evaluations[q.id]
-                const isAnswered = q.status === 'answered' || !!evalData
-                return (
-                  <div key={q.id} className={`p-4 rounded-xl border transition-all ${
-                    evalData ? (evalData.score && evalData.score >= 7
-                      ? 'border-emerald-200 bg-emerald-50/50'
-                      : 'border-amber-200 bg-amber-50/50')
-                    : isAnswered ? 'border-gray-200 bg-gray-50' : 'border-indigo-100 bg-indigo-50/50'
-                  }`}>
+              {questions
+                .filter((q: any) => !evaluations[q.id] && q.status !== 'answered')
+                .map((q: any) => (
+                  <div key={q.id} className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/50 transition-all">
                     <p className="text-sm font-medium text-gray-900 mb-3 flex items-start gap-2">
                       <MessageCircle size={14} className="text-indigo-400 mt-0.5 shrink-0" />
                       {q.question}
@@ -437,56 +613,38 @@ export default function GoalDetail() {
                         q.difficulty === 'hard' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
                       }`}>{q.difficulty}</span>
                     </p>
-
-                    {evalData ? (
-                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-500 text-xs">AI 评分</span>
-                          <span className={`text-lg font-bold ${
-                            evalData.score && evalData.score >= 7 ? 'text-emerald-600' :
-                            evalData.score && evalData.score >= 4 ? 'text-amber-600' : 'text-red-600'
-                          }`}>{evalData.score}/10</span>
-                        </div>
-                        {evalData.correctness && <p className="text-gray-600 bg-white/60 rounded-lg p-2 text-xs">{evalData.correctness}</p>}
-                        {evalData.suggestion && (
-                          <p className="text-indigo-600 bg-white rounded-lg p-2 text-xs border border-indigo-100">{evalData.suggestion}</p>
+                    <div className="space-y-2">
+                      <textarea
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none resize-none transition-all"
+                        rows={3}
+                        placeholder="写下你的回答..."
+                        value={answers[q.id] || ''}
+                        onChange={e => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                      />
+                      <button
+                        onClick={() => handleSubmitAnswer(q.id)}
+                        disabled={submittingQ === q.id || !(answers[q.id] || '').trim()}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 cursor-pointer text-sm transition-all shadow-sm shadow-indigo-200"
+                      >
+                        {submittingQ === q.id ? (
+                          <><Loader2 size={14} className="animate-spin" /> AI 评估中...</>
+                        ) : (
+                          <><Send size={13} /> 提交评估</>
                         )}
-                        {evalData.need_adjust && (
-                          <button onClick={handleGenerateRoadmap}
-                            className="text-xs text-orange-600 hover:text-orange-800 flex items-center gap-1">
-                            <AlertCircle size={12} /> AI 建议调整路线 →
-                          </button>
-                        )}
-                      </motion.div>
-                    ) : isAnswered ? (
-                      <p className="text-sm text-gray-400 flex items-center gap-1.5">
-                        <Loader2 size={12} className="animate-spin" /> 等待评估...
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        <textarea
-                          className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none resize-none transition-all"
-                          rows={3}
-                          placeholder="写下你的回答..."
-                          value={answers[q.id] || ''}
-                          onChange={e => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
-                        />
-                        <button
-                          onClick={() => handleSubmitAnswer(q.id)}
-                          disabled={submittingQ === q.id || !(answers[q.id] || '').trim()}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 cursor-pointer text-sm transition-all shadow-sm shadow-indigo-200"
-                        >
-                          {submittingQ === q.id ? (
-                            <><Loader2 size={14} className="animate-spin" /> AI 评估中...</>
-                          ) : (
-                            <><Send size={13} /> 提交评估</>
-                          )}
-                        </button>
-                      </div>
-                    )}
+                      </button>
+                    </div>
                   </div>
-                )
-              })}
+                ))}
+            </div>
+          )}
+          {/* 生成更多题目 */}
+          {questions.length > 0 && questions.every((q: any) => q.status === 'answered' || evaluations[q.id]) && (
+            <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-xs text-gray-400">全部答完，可以继续刷题</span>
+              <button onClick={handleGenerateQuestions} disabled={actionLoading === '生成问题'}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 cursor-pointer transition-all shadow-sm shadow-indigo-200">
+                <Sparkles size={13} /> 生成更多题目
+              </button>
             </div>
           )}
           <div className="mt-4 pt-3 border-t border-gray-100">
@@ -572,8 +730,9 @@ export default function GoalDetail() {
         {selectedTask && (
           <LearningModal
             task={selectedTask}
-            onClose={() => setSelectedTask(null)}
+            onClose={() => { setSelectedTask(null); setModalLoading(false) }}
             onRegenerate={handleGeneratePlan}
+            loading={modalLoading}
           />
         )}
       </AnimatePresence>

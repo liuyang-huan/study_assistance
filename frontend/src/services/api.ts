@@ -17,6 +17,8 @@ export const getRoadmap = (goalId: number) =>
   http.get<Roadmap>(`/goals/${goalId}/roadmap`).then(r => r.data)
 export const generateRoadmap = (goalId: number) =>
   http.post<Roadmap>(`/goals/${goalId}/roadmap/generate`).then(r => r.data)
+export const learnTopic = (goalId: number, topicDay: number) =>
+  http.post(`/goals/${goalId}/roadmap/learn/${topicDay}`).then(r => r.data)
 
 // 每日规划
 export const getPlans = (goalId: number, date?: string) =>
