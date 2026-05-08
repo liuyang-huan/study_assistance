@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   BookOpen, Clock, Lightbulb, Code, PenLine, X, Target,
-  Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Save, AlarmClock, Loader2, AlertCircle,
+  Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Save, Loader2, AlertCircle,
   MessageCircle, Send, Bot, User, Sparkles
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -28,8 +28,8 @@ interface Materials {
   learning_objectives?: string[]
   key_concepts?: KeyConcept[]
   content?: string
-  example?: string  // 旧字段，兼容
-  practice?: string  // 旧字段，兼容
+  example?: string
+  practice?: string
   examples?: Example[]
   practice_questions?: PracticeQuestion[]
 }
@@ -41,10 +41,20 @@ interface TaskInfo {
   materials?: Materials
 }
 
-function renderMarkdown(text: string) {
-  if (!text) return null
+function hasMaterialsContent(m: any): boolean {
+  if (!m || typeof m !== 'object') return false
+  return !!(
+    m.summary || m.content || m.example || m.practice ||
+    (m.key_concepts?.length > 0) ||
+    (m.learning_objectives?.length > 0) ||
+    (m.examples?.length > 0) ||
+    (m.practice_questions?.length > 0)
+  )
+}
 
-  // 先处理表格（多行匹配）
+function renderMarkdown(text: string) {
+  if (!text || typeof text !== 'string') return null
+
   let html = text.replace(/\n(\|.+\|)\n\|[-| :]+\|\n((?:\|.+\|\n?)+)/g, (_m: string, header: string, _sep: string, rows: string) => {
     const hCells = header.split('|').filter(c => c.trim()).map(c => `<th class="px-3 py-2 text-left text-xs font-semibold text-gray-700 bg-gray-50 border-b border-gray-200">${c.trim()}</th>`).join('')
     const rHtml = rows.trim().split('\n').map((row: string) => {
@@ -75,6 +85,28 @@ function formatTime(seconds: number) {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
 }
 
+const sectionLabels: Record<string, string> = {
+  objectives: '学习目标',
+  summary: '本节概述',
+  concepts: '核心知识点',
+  content: '学习内容',
+  examples: '示例演示',
+  example: '示例演示',
+  practice_qs: '巩固练习',
+  practice: '巩固练习',
+}
+
+const sectionQueries: Record<string, string> = {
+  objectives: '请帮我梳理一下这部分的学习目标，明确学习重点',
+  summary: '请给我详细讲解一下这部分内容的概述和核心要点',
+  concepts: '请给我详细解释一下这部分的核心知识点和关键概念',
+  content: '请给我深入讲解一下这部分的学习内容，尽量通俗易懂',
+  examples: '请给我举例说明这部分内容，用具体的实例帮助理解',
+  example: '请给我举例说明这部分内容，用具体的实例帮助理解',
+  practice_qs: '请帮我解析一下这部分的练习题，给出解题思路',
+  practice: '请帮我解析一下这部分的练习题，给出解题思路',
+}
+
 export default function LearningModal({
   task,
   goalId,
@@ -97,10 +129,10 @@ export default function LearningModal({
   const m = task.materials
   const [activeSection, setActiveSection] = useState<string>('summary')
 
-  // 番茄钟计时器
+  // 番茄钟 — 进入页面自动开始计时
   const pomodoroDuration = Math.max(task.duration_min, 5) * 60
   const [timerSeconds, setTimerSeconds] = useState(pomodoroDuration)
-  const [isRunning, setIsRunning] = useState(false)
+  const [isRunning, setIsRunning] = useState(true)
   const [timerMode, setTimerMode] = useState<'focus' | 'break'>('focus')
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -108,8 +140,8 @@ export default function LearningModal({
   const notesKey = `learning-note-${task.title}`
   const [notes, setNotes] = useState(() => localStorage.getItem(notesKey) || '')
   const [notesSaved, setNotesSaved] = useState(false)
+  const [showNotes, setShowNotes] = useState(false)
   const [showRightPanel, setShowRightPanel] = useState(true)
-  const [rightPanelMode, setRightPanelMode] = useState<'timer' | 'chat'>('timer')
 
   // AI 搭子聊天状态
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
@@ -124,10 +156,10 @@ export default function LearningModal({
     return parts.join('\n')
   }
 
-  const sendMessage = async () => {
-    const msg = chatInput.trim()
+  const sendMessage = async (message?: string) => {
+    const msg = (message || chatInput).trim()
     if (!msg || chatLoading) return
-    setChatInput('')
+    if (!message) setChatInput('')
     const updated = [...chatMessages, { role: 'user', content: msg }]
     setChatMessages(updated)
     setChatLoading(true)
@@ -143,6 +175,13 @@ export default function LearningModal({
     } finally {
       setChatLoading(false)
     }
+  }
+
+  const askAboutSection = (sectionId: string) => {
+    const label = sectionLabels[sectionId] || sectionId
+    const query = sectionQueries[sectionId] || `请帮我讲解一下「${label}」部分的内容`
+    const fullQuery = `我正在学习「${task.title}」，当前看到「${label}」部分。${query}`
+    sendMessage(fullQuery)
   }
 
   // 自动滚动到底部
@@ -190,7 +229,7 @@ export default function LearningModal({
       setIsRunning(false)
       if (timerMode === 'focus') {
         setTimerMode('break')
-        setTimerSeconds(300) // 5分钟休息
+        setTimerSeconds(300)
       } else {
         setTimerMode('focus')
         setTimerSeconds(pomodoroDuration)
@@ -210,9 +249,11 @@ export default function LearningModal({
     setTimeout(() => setNotesSaved(false), 2000)
   }
 
-  const progress = timerMode === 'focus'
+  const timerProgress = timerMode === 'focus'
     ? ((pomodoroDuration - timerSeconds) / pomodoroDuration) * 100
     : ((300 - timerSeconds) / 300) * 100
+
+  const timerPct = Math.round(timerProgress)
 
   return (
     <motion.div
@@ -232,17 +273,8 @@ export default function LearningModal({
         </div>
 
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+          <p className="text-[10px] text-gray-400 px-3 pb-1 uppercase tracking-wider">点击章节 → AI 自动讲解</p>
           {sections.map((id) => {
-            const labels: Record<string, string> = {
-              objectives: '学习目标',
-              summary: '本节概述',
-              concepts: '核心知识点',
-              content: '学习内容',
-              examples: '示例演示',
-              example: '示例演示',
-              practice_qs: '巩固练习',
-              practice: '巩固练习',
-            }
             const icons: Record<string, JSX.Element> = {
               objectives: <Target size={12} />,
               summary: <Lightbulb size={12} />,
@@ -254,22 +286,22 @@ export default function LearningModal({
               practice: <PenLine size={12} />,
             }
             return (
-              <a
+              <button
                 key={id}
-                href={`#sec-${id}`}
-                onClick={(e) => {
-                  e.preventDefault()
+                onClick={() => {
                   document.getElementById(`sec-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  askAboutSection(id)
                 }}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all no-underline ${
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer ${
                   activeSection === id
                     ? 'bg-indigo-50 text-indigo-700 font-medium'
                     : 'text-gray-500 hover:bg-gray-50'
                 }`}
               >
                 {icons[id]}
-                {labels[id]}
-              </a>
+                {sectionLabels[id]}
+                <MessageCircle size={10} className="ml-auto text-indigo-300" />
+              </button>
             )
           })}
         </nav>
@@ -277,50 +309,55 @@ export default function LearningModal({
 
       {/* 中间主内容区 */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* 顶部栏 */}
+        {/* 顶部栏 — 含紧凑计时器 */}
         <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <button onClick={onClose}
-              className="p-2 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors">
+              className="p-2 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors shrink-0">
               <X size={18} className="text-gray-400" />
             </button>
-            <div>
-              <h2 className="text-base font-semibold text-gray-900">{task.title}</h2>
-              {task.detail && <p className="text-xs text-gray-400">{task.detail}</p>}
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-gray-900 truncate">{task.title}</h2>
+              {task.detail && <p className="text-xs text-gray-400 truncate">{task.detail}</p>}
             </div>
           </div>
-          <div className="flex items-center gap-1">
-            {showRightPanel && (
-              <>
-                <button
-                  onClick={() => setRightPanelMode('timer')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-all ${
-                    rightPanelMode === 'timer'
-                      ? 'bg-indigo-50 text-indigo-600 font-medium'
-                      : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  <AlarmClock size={13} className="inline mr-1" />
-                  计时器
-                </button>
-                <button
-                  onClick={() => setRightPanelMode('chat')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-all ${
-                    rightPanelMode === 'chat'
-                      ? 'bg-indigo-50 text-indigo-600 font-medium'
-                      : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  <MessageCircle size={13} className="inline mr-1" />
-                  AI 搭子
-                </button>
-                <span className="w-px h-5 bg-gray-200 mx-1" />
-              </>
-            )}
+
+          {/* 紧凑计时器 */}
+          <div className="flex items-center gap-2 ml-4 shrink-0">
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium ${
+              timerMode === 'focus' ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'
+            }`}>
+              <Clock size={13} />
+              <span>{formatTime(timerSeconds)}</span>
+              <span className="text-[10px] font-normal text-gray-400">
+                {timerMode === 'focus' ? `/${task.duration_min}min` : '休息'}
+              </span>
+            </div>
+            {/* 微型进度条 */}
+            <div className="w-12 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-1000 ${
+                  timerMode === 'focus' ? 'bg-indigo-500' : 'bg-emerald-500'
+                }`}
+                style={{ width: `${timerPct}%` }}
+              />
+            </div>
+            <button onClick={toggleTimer}
+              className={`p-1.5 rounded-lg cursor-pointer transition-all ${
+                isRunning
+                  ? 'bg-amber-100 text-amber-600 hover:bg-amber-200'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}>
+              {isRunning ? <Pause size={14} /> : <Play size={14} />}
+            </button>
+            <button onClick={resetTimer}
+              className="p-1.5 rounded-lg bg-gray-100 text-gray-400 hover:bg-gray-200 cursor-pointer transition-all">
+              <RotateCcw size={13} />
+            </button>
+            <span className="w-px h-5 bg-gray-200 mx-1" />
             <button
               onClick={() => setShowRightPanel(!showRightPanel)}
-              className="p-2 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
-            >
+              className="p-2 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors">
               {showRightPanel ? <ChevronRight size={16} className="text-gray-400" /> : <ChevronLeft size={16} className="text-gray-400" />}
             </button>
           </div>
@@ -329,7 +366,7 @@ export default function LearningModal({
         {/* 滚动内容 */}
         <div ref={contentRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-8 py-6">
           <div className="max-w-3xl mx-auto space-y-8">
-            {!m ? (
+            {!hasMaterialsContent(m) ? (
               loading ? (
                 <div className="text-center py-20">
                   <Loader2 size={48} className="mx-auto mb-5 text-indigo-400 animate-spin" />
@@ -376,7 +413,7 @@ export default function LearningModal({
                 {m.learning_objectives && m.learning_objectives.length > 0 && (
                   <section id="sec-objectives">
                     <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
-                      <Target size={16} className="text-emerald-500" /> 学习目标
+                      <Target size={16} className="text-emerald-500" /> {sectionLabels.objectives}
                     </h3>
                     <div className="bg-emerald-50 rounded-2xl border border-emerald-100 p-5">
                       <ul className="space-y-2">
@@ -398,7 +435,7 @@ export default function LearningModal({
                   <section id="sec-summary">
                     <div className="p-5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100">
                       <h3 className="text-sm font-semibold text-indigo-700 flex items-center gap-1.5 mb-2">
-                        <Lightbulb size={15} /> 本节概述
+                        <Lightbulb size={15} /> {sectionLabels.summary}
                       </h3>
                       <p className="text-sm text-gray-700 leading-relaxed">{m.summary}</p>
                     </div>
@@ -409,7 +446,7 @@ export default function LearningModal({
                 {m.key_concepts && m.key_concepts.length > 0 && (
                   <section id="sec-concepts">
                     <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
-                      <Target size={16} className="text-indigo-500" /> 核心知识点
+                      <Target size={16} className="text-indigo-500" /> {sectionLabels.concepts}
                     </h3>
                     <div className="grid gap-3">
                       {m.key_concepts.map((kc, i) => (
@@ -422,11 +459,11 @@ export default function LearningModal({
                   </section>
                 )}
 
-                {/* 详细学习内容 */}
+                {/* 学习内容 */}
                 {m.content && (
                   <section id="sec-content">
                     <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
-                      <BookOpen size={16} className="text-indigo-500" /> 学习内容
+                      <BookOpen size={16} className="text-indigo-500" /> {sectionLabels.content}
                     </h3>
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 prose prose-sm max-w-none">
                       <div className="text-sm text-gray-700 leading-relaxed space-y-3">
@@ -440,7 +477,7 @@ export default function LearningModal({
                 {m.example && !m.examples && (
                   <section id="sec-example">
                     <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
-                      <Code size={16} className="text-indigo-500" /> 示例演示
+                      <Code size={16} className="text-indigo-500" /> {sectionLabels.example}
                     </h3>
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                       <div className="text-sm text-gray-700 leading-relaxed">
@@ -454,7 +491,7 @@ export default function LearningModal({
                 {m.examples && m.examples.length > 0 && (
                   <section id="sec-examples">
                     <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
-                      <Code size={16} className="text-indigo-500" /> 示例演示
+                      <Code size={16} className="text-indigo-500" /> {sectionLabels.examples}
                     </h3>
                     <div className="space-y-4">
                       {m.examples.map((ex, i) => (
@@ -483,7 +520,7 @@ export default function LearningModal({
                 {m.practice && !m.practice_questions && (
                   <section id="sec-practice">
                     <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
-                      <PenLine size={16} className="text-indigo-500" /> 巩固练习
+                      <PenLine size={16} className="text-indigo-500" /> {sectionLabels.practice}
                     </h3>
                     <div className="bg-amber-50 rounded-2xl border border-amber-100 p-6">
                       <div className="text-sm text-gray-700 leading-relaxed">
@@ -497,7 +534,7 @@ export default function LearningModal({
                 {m.practice_questions && m.practice_questions.length > 0 && (
                   <section id="sec-practice_qs">
                     <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
-                      <PenLine size={16} className="text-indigo-500" /> 巩固练习
+                      <PenLine size={16} className="text-indigo-500" /> {sectionLabels.practice_qs}
                     </h3>
                     <div className="space-y-3">
                       {m.practice_questions.map((q, i) => (
@@ -506,19 +543,17 @@ export default function LearningModal({
                             <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
                               {i + 1}
                             </span>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-800">{q.question}</p>
+                            <div className="flex-1">
+                              <span className="text-sm text-gray-800">{q.question}</span>
                             </div>
-                            <ChevronRight size={14} className="text-gray-300 group-open:rotate-90 transition-transform shrink-0 mt-1" />
+                            <ChevronRight size={14} className="text-gray-300 group-open:rotate-90 transition-transform shrink-0" />
                           </summary>
-                          {q.hint && (
-                            <div className="px-5 pb-4 pt-1 border-t border-amber-50">
-                              <p className="text-xs text-amber-700 flex items-start gap-1.5">
-                                <Lightbulb size={12} className="shrink-0 mt-0.5" />
-                                <span>{q.hint}</span>
-                              </p>
+                          <div className="px-5 pb-4 pl-12">
+                            <div className="p-3 bg-amber-50 rounded-xl">
+                              <p className="text-[11px] text-amber-700 font-medium mb-1">提示</p>
+                              <p className="text-xs text-gray-600">{q.hint}</p>
                             </div>
-                          )}
+                          </div>
                         </details>
                       ))}
                     </div>
@@ -530,178 +565,135 @@ export default function LearningModal({
         </div>
       </div>
 
-      {/* 右侧面板 */}
+      {/* 右侧面板 — AI 搭子聊天（默认） */}
       {showRightPanel && (
         <aside className="w-80 bg-white border-l border-gray-200 flex flex-col shrink-0">
-          {rightPanelMode === 'timer' ? (
-            <>
-              {/* 计时器 */}
-              <div className="p-4 border-b border-gray-100">
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5 mb-3">
-                  <AlarmClock size={12} />
-                  {timerMode === 'focus' ? '专注计时' : '休息时间'}
-                </h4>
+          {/* AI 搭子头部 */}
+          <div className="p-4 border-b border-gray-100">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles size={12} className="text-indigo-500" /> AI 学习搭子
+              </h4>
+              <button
+                onClick={() => setShowNotes(!showNotes)}
+                className={`text-[11px] flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-all ${
+                  showNotes ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}>
+                <PenLine size={11} /> 笔记
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+              点击左侧章节，AI 自动讲解；也可直接提问
+            </p>
+          </div>
 
-                <div className="flex flex-col items-center">
-                  <div className="relative w-32 h-32 mb-3">
-                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                      <circle cx="50" cy="50" r="42" fill="none" stroke="#f1f5f9" strokeWidth="8" />
-                      <circle
-                        cx="50" cy="50" r="42" fill="none"
-                        stroke={timerMode === 'focus' ? 'url(#timerGradient)' : '#10b981'}
-                        strokeWidth="8"
-                        strokeLinecap="round"
-                        strokeDasharray={`${2 * Math.PI * 42}`}
-                        strokeDashoffset={`${2 * Math.PI * 42 * (1 - progress / 100)}`}
-                      />
-                      <defs>
-                        <linearGradient id="timerGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" stopColor="#6366f1" />
-                          <stop offset="100%" stopColor="#8b5cf6" />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className={`text-2xl font-bold font-mono ${timerMode === 'focus' ? 'text-indigo-600' : 'text-emerald-600'}`}>
-                        {formatTime(timerSeconds)}
-                      </span>
-                      <span className="text-[10px] text-gray-400">{timerMode === 'focus' ? '分钟' : '休息'}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button onClick={toggleTimer}
-                      className={`w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-all ${
-                        isRunning
-                          ? 'bg-amber-100 text-amber-600 hover:bg-amber-200'
-                          : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'
+          {/* 笔记区（可折叠） */}
+          <AnimatePresence>
+            {showNotes && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden border-b border-gray-100"
+              >
+                <div className="p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-medium text-gray-500">学习笔记</span>
+                    <button onClick={saveNotes}
+                      className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-all ${
+                        notesSaved ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                       }`}>
-                      {isRunning ? <Pause size={16} /> : <Play size={16} />}
-                    </button>
-                    <button onClick={resetTimer}
-                      className="w-9 h-9 rounded-full flex items-center justify-center bg-gray-100 text-gray-400 hover:bg-gray-200 cursor-pointer transition-all">
-                      <RotateCcw size={14} />
+                      <Save size={10} /> {notesSaved ? '已保存' : '保存'}
                     </button>
                   </div>
+                  <textarea
+                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs resize-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                    rows={4}
+                    placeholder="记录你的学习笔记、疑问、心得..."
+                    value={notes}
+                    onChange={e => { setNotes(e.target.value); setNotesSaved(false) }}
+                  />
                 </div>
-              </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-              {/* 笔记区 */}
-              <div className="flex-1 flex flex-col p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <PenLine size={12} /> 学习笔记
-                  </h4>
-                  <button onClick={saveNotes}
-                    className={`text-[11px] flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-all ${
-                      notesSaved ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                    }`}>
-                    <Save size={11} /> {notesSaved ? '已保存' : '保存'}
-                  </button>
-                </div>
-                <textarea
-                  className="flex-1 w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm resize-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
-                  placeholder="记录你的学习笔记、疑问、心得..."
-                  value={notes}
-                  onChange={e => { setNotes(e.target.value); setNotesSaved(false) }}
-                />
-              </div>
-
-              <div className="p-4 border-t border-gray-100">
-                <button onClick={onClose}
-                  className="w-full py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 cursor-pointer text-sm font-medium transition-all shadow-sm shadow-indigo-200 flex items-center justify-center gap-2">
-                  完成学习 <ChevronRight size={14} />
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* AI 搭子聊天 */}
-              <div className="p-4 border-b border-gray-100">
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles size={12} className="text-indigo-500" /> AI 学习搭子
-                </h4>
-                <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
-                  学习中遇到问题？随时问 AI 搭子
+          {/* 聊天消息区 */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            {chatMessages.length === 0 ? (
+              <div className="text-center py-12">
+                <Bot size={40} className="mx-auto mb-3 text-gray-200" />
+                <p className="text-sm text-gray-400">点击左侧章节让 AI 讲解</p>
+                <p className="text-xs text-gray-300 mt-1">
+                  或者直接输入问题开始对话
                 </p>
               </div>
-
-              <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                {chatMessages.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Bot size={40} className="mx-auto mb-3 text-gray-200" />
-                    <p className="text-sm text-gray-400">还没聊过，来问问吧</p>
-                    <p className="text-xs text-gray-300 mt-1">
-                      "这个概念不太懂" "给个例子" "怎么记更快"
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    {chatMessages.map((msg, i) => (
-                      <motion.div
-                        key={i}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : ''}`}
-                      >
-                        {msg.role === 'assistant' && (
-                          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 mt-0.5">
-                            <Bot size={12} className="text-white" />
-                          </div>
-                        )}
-                        <div
-                          className={`text-xs leading-relaxed px-3 py-2 rounded-xl max-w-[85%] ${
-                            msg.role === 'user'
-                              ? 'bg-indigo-500 text-white rounded-br-md'
-                              : 'bg-gray-100 text-gray-700 rounded-bl-md'
-                          }`}
-                        >
-                          <div className="prose prose-xs max-w-none">{renderMarkdown(msg.content) || msg.content}</div>
-                        </div>
-                        {msg.role === 'user' && (
-                          <div className="w-6 h-6 rounded-lg bg-gray-300 flex items-center justify-center shrink-0 mt-0.5">
-                            <User size={12} className="text-white" />
-                          </div>
-                        )}
-                      </motion.div>
-                    ))}
-                    {chatLoading && (
-                      <div className="flex gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 mt-0.5">
-                          <Bot size={12} className="text-white" />
-                        </div>
-                        <div className="bg-gray-100 rounded-xl rounded-bl-md px-3 py-2">
-                          <Loader2 size={14} className="animate-spin text-indigo-400" />
-                        </div>
+            ) : (
+              <>
+                {chatMessages.map((msg, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : ''}`}
+                  >
+                    {msg.role === 'assistant' && (
+                      <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 mt-0.5">
+                        <Bot size={12} className="text-white" />
                       </div>
                     )}
-                    <div ref={chatEndRef} />
-                  </>
+                    <div
+                      className={`text-xs leading-relaxed px-3 py-2 rounded-xl max-w-[85%] ${
+                        msg.role === 'user'
+                          ? 'bg-indigo-500 text-white rounded-br-md'
+                          : 'bg-gray-100 text-gray-700 rounded-bl-md'
+                      }`}
+                    >
+                      <div className="prose prose-xs max-w-none">{renderMarkdown(msg.content) || msg.content}</div>
+                    </div>
+                    {msg.role === 'user' && (
+                      <div className="w-6 h-6 rounded-lg bg-gray-300 flex items-center justify-center shrink-0 mt-0.5">
+                        <User size={12} className="text-white" />
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+                {chatLoading && (
+                  <div className="flex gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 mt-0.5">
+                      <Bot size={12} className="text-white" />
+                    </div>
+                    <div className="bg-gray-100 rounded-xl rounded-bl-md px-3 py-2">
+                      <Loader2 size={14} className="animate-spin text-indigo-400" />
+                    </div>
+                  </div>
                 )}
-              </div>
+                <div ref={chatEndRef} />
+              </>
+            )}
+          </div>
 
-              <div className="p-3 border-t border-gray-100">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                    className="flex-1 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
-                    placeholder="问 AI 搭子..."
-                    disabled={chatLoading}
-                  />
-                  <button
-                    onClick={sendMessage}
-                    disabled={chatLoading || !chatInput.trim()}
-                    className="w-9 h-9 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white flex items-center justify-center hover:from-indigo-600 hover:to-purple-700 disabled:opacity-40 cursor-pointer transition-all shrink-0"
-                  >
-                    <Send size={14} />
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
+          {/* 聊天输入 */}
+          <div className="p-3 border-t border-gray-100">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
+                className="flex-1 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                placeholder="问 AI 搭子..."
+                disabled={chatLoading}
+              />
+              <button
+                onClick={() => sendMessage()}
+                disabled={chatLoading || !chatInput.trim()}
+                className="w-9 h-9 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white flex items-center justify-center hover:from-indigo-600 hover:to-purple-700 disabled:opacity-40 cursor-pointer transition-all shrink-0"
+              >
+                <Send size={14} />
+              </button>
+            </div>
+          </div>
         </aside>
       )}
     </motion.div>

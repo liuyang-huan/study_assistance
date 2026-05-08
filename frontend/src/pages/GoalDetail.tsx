@@ -138,11 +138,17 @@ export default function GoalDetail() {
       markLearned(topicDay)
       setModalLoading(false)
       setModalError('')
+      // 验证 AI 返回的材料是否有效（非空对象）
+      const m = materials.materials
+      if (!m || (typeof m === 'object' && !m.summary && !m.content && !m.example && !m.practice && !(m.key_concepts?.length > 0))) {
+        setModalError('AI 返回的学习材料为空，请重试')
+        return
+      }
       setSelectedTask({
         title: materials.title || topicTitle,
         duration_min: materials.duration_min || 30,
         detail: materials.detail || '',
-        materials: materials.materials,
+        materials: m,
       })
     } catch (e: any) {
       setModalLoading(false)
