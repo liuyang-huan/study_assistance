@@ -143,6 +143,10 @@ export default function LearningModal({
   const [showNotes, setShowNotes] = useState(false)
   const [showRightPanel, setShowRightPanel] = useState(true)
 
+  // 选中文字快速提问
+  const [selectedText, setSelectedText] = useState('')
+  const selectionRef = useRef<{ text: string; x: number; y: number } | null>(null)
+
   // AI 搭子聊天状态
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
   const [chatInput, setChatInput] = useState('')
@@ -154,6 +158,34 @@ export default function LearningModal({
     if (task.title) parts.push(`当前学习: ${task.title}`)
     if (task.materials?.summary) parts.push(`内容概述: ${task.materials.summary}`)
     return parts.join('\n')
+  }
+
+  // 检测文本选中，记录位置
+  const handleContentMouseUp = () => {
+    const sel = window.getSelection()
+    const text = sel?.toString().trim() || ''
+    if (text && sel?.rangeCount) {
+      const range = sel.getRangeAt(0)
+      const rect = range.getBoundingClientRect()
+      setSelectedText(text)
+      selectionRef.current = { text, x: rect.left + rect.width / 2, y: rect.top - 10 }
+    } else {
+      setSelectedText('')
+      selectionRef.current = null
+    }
+  }
+
+  // 内容区按键：选中文字 + Enter → 快速提问
+  const handleContentKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey && selectedText) {
+      e.preventDefault()
+      if (!showRightPanel) setShowRightPanel(true)
+      const query = `我在学习中看到这段话，不太理解，请帮我详细解释一下：\n\n> ${selectedText}`
+      sendMessage(query)
+      window.getSelection()?.removeAllRanges()
+      setSelectedText('')
+      selectionRef.current = null
+    }
   }
 
   const sendMessage = async (message?: string) => {
@@ -364,7 +396,7 @@ export default function LearningModal({
         </header>
 
         {/* 滚动内容 */}
-        <div ref={contentRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-8 py-6">
+        <div ref={contentRef} onScroll={onScroll} onMouseUp={handleContentMouseUp} onKeyDown={handleContentKeyDown} tabIndex={-1} className="flex-1 overflow-y-auto px-8 py-6 outline-none">
           <div className="max-w-3xl mx-auto space-y-8">
             {!hasMaterialsContent(m) ? (
               loading ? (
@@ -695,6 +727,18 @@ export default function LearningModal({
             </div>
           </div>
         </aside>
+      )}
+      {/* 选中文字浮动提示：按 Enter 询问 AI */}
+      {selectedText && selectionRef.current && (
+        <div
+          className="fixed z-[100] px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg shadow-lg pointer-events-none animate-bounce"
+          style={{
+            left: Math.min(Math.max(selectionRef.current.x - 80, 10), window.innerWidth - 200),
+            top: Math.max(selectionRef.current.y - 36, 10),
+          }}
+        >
+          按 <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px] font-mono">Enter</kbd> 询问 AI 搭子
+        </div>
       )}
     </motion.div>
   )
