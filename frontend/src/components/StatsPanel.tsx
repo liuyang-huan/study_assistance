@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
-import { getStats } from '../services/api'
-import type { LearningStats } from '../types'
+import { getStats, getHeatmap } from '../services/api'
+import type { LearningStats, HeatmapDay } from '../types'
+import Heatmap from './Heatmap'
 
 export default function StatsPanel({ goalId }: { goalId: number }) {
   const [stats, setStats] = useState<LearningStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [heatmap, setHeatmap] = useState<HeatmapDay[]>([])
+  const [heatmapLoading, setHeatmapLoading] = useState(true)
 
   useEffect(() => {
     setLoading(true)
@@ -12,6 +15,11 @@ export default function StatsPanel({ goalId }: { goalId: number }) {
       .then(setStats)
       .catch(() => setStats(null))
       .finally(() => setLoading(false))
+    setHeatmapLoading(true)
+    getHeatmap(goalId)
+      .then(setHeatmap)
+      .catch(() => setHeatmap([]))
+      .finally(() => setHeatmapLoading(false))
   }, [goalId])
 
   if (loading) {
@@ -55,6 +63,9 @@ export default function StatsPanel({ goalId }: { goalId: number }) {
         <StatCard label="平均评分" value={stats.avg_score} unit="/10" color="text-orange-600" bg="bg-orange-50"
           extra={`${stats.answered_questions}/${stats.total_questions} 题`} />
       </div>
+
+      {/* 打卡热力图 */}
+      <Heatmap data={heatmap} loading={heatmapLoading} />
 
       {/* 阶段进度 + 评分趋势 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

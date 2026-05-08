@@ -48,6 +48,8 @@ export default function GoalDetail() {
   const [actionLoading, setActionLoading] = useState('')
   const [selectedTask, setSelectedTask] = useState<any>(null)
   const [modalLoading, setModalLoading] = useState(false)
+  const [modalError, setModalError] = useState('')
+  const [retryTopic, setRetryTopic] = useState<{ day: number; title: string } | null>(null)
   const [showGraph, setShowGraph] = useState(false)
   const [topicLoading, setTopicLoading] = useState<number | null>(null)
 
@@ -124,6 +126,8 @@ export default function GoalDetail() {
   const handleLearnTopic = async (topicDay: number, topicTitle: string) => {
     setTopicLoading(topicDay)
     setModalLoading(true)
+    setModalError('')
+    setRetryTopic({ day: topicDay, title: topicTitle })
     setSelectedTask({
       title: topicTitle,
       duration_min: 30,
@@ -133,16 +137,17 @@ export default function GoalDetail() {
       const materials = await learnTopic(+id!, topicDay)
       markLearned(topicDay)
       setModalLoading(false)
+      setModalError('')
       setSelectedTask({
         title: materials.title || topicTitle,
         duration_min: materials.duration_min || 30,
         detail: materials.detail || '',
         materials: materials.materials,
       })
-    } catch (e) {
-      setError('生成学习材料失败，请稍后重试')
+    } catch (e: any) {
+      console.error('生成学习材料失败', e)
       setModalLoading(false)
-      setSelectedTask(null)
+      setModalError(e?.response?.data?.detail || e?.message || 'AI 服务响应异常，请稍后重试')
     } finally {
       setTopicLoading(null)
     }
@@ -730,9 +735,11 @@ export default function GoalDetail() {
         {selectedTask && (
           <LearningModal
             task={selectedTask}
-            onClose={() => { setSelectedTask(null); setModalLoading(false) }}
+            onClose={() => { setSelectedTask(null); setModalLoading(false); setModalError('') }}
             onRegenerate={handleGeneratePlan}
             loading={modalLoading}
+            error={modalError}
+            onRetry={retryTopic ? () => handleLearnTopic(retryTopic.day, retryTopic.title) : undefined}
           />
         )}
       </AnimatePresence>

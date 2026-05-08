@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   BookOpen, Clock, Lightbulb, Code, PenLine, X, Target,
-  Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Save, AlarmClock, Loader2
+  Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Save, AlarmClock, Loader2, AlertCircle
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -63,11 +63,15 @@ export default function LearningModal({
   onClose,
   onRegenerate,
   loading = false,
+  error = '',
+  onRetry,
 }: {
   task: TaskInfo
   onClose: () => void
   onRegenerate?: () => void
   loading?: boolean
+  error?: string
+  onRetry?: () => void
 }) {
   const m = task.materials
   const [activeSection, setActiveSection] = useState<string>('summary')
@@ -230,6 +234,26 @@ export default function LearningModal({
                   <Loader2 size={48} className="mx-auto mb-5 text-indigo-400 animate-spin" />
                   <p className="text-gray-500 font-medium mb-1">AI 正在生成学习材料...</p>
                   <p className="text-gray-400 text-sm mb-6">请耐心等待，约需 10-30 秒</p>
+                </div>
+              ) : error ? (
+                <div className="text-center py-20">
+                  <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-5">
+                    <AlertCircle size={28} className="text-red-500" />
+                  </div>
+                  <p className="text-gray-700 font-medium mb-1">生成失败</p>
+                  <p className="text-gray-400 text-sm mb-6 max-w-md mx-auto">{error}</p>
+                  <div className="flex items-center justify-center gap-3">
+                    <button onClick={onClose}
+                      className="px-5 py-2.5 border border-gray-200 text-gray-500 rounded-xl hover:bg-gray-50 cursor-pointer text-sm transition-colors">
+                      关闭
+                    </button>
+                    {onRetry && (
+                      <button onClick={onRetry}
+                        className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 cursor-pointer text-sm font-medium transition-all shadow-md shadow-indigo-200">
+                        重新生成
+                      </button>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-20">

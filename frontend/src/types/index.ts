@@ -113,3 +113,12 @@ export interface LearningStats {
   study_trend: { date: string; minutes: number }[]
   topics_covered: { date: string; type: string; content: string; reflection?: string; score?: number }[]
 }
+
+export interface HeatmapDay {
+  date: string
+  level: number
+  minutes: number
+  journals: number
+  plan_completed: boolean
+  questions: number
+}

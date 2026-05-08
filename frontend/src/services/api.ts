@@ -76,3 +76,5 @@ export function downloadBlob(data: Blob, filename: string) {
 // 学习统计
 export const getStats = (goalId: number) =>
   http.get<LearningStats>(`/goals/${goalId}/stats`).then(r => r.data)
+export const getHeatmap = (goalId: number) =>
+  http.get(`/goals/${goalId}/heatmap`).then(r => r.data)

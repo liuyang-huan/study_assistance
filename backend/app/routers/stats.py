@@ -156,6 +156,72 @@ def get_stats(goal_id: int, db: Session = Depends(get_db)):
     }
 
 
+@router.get('/heatmap')
+def get_heatmap(goal_id: int, db: Session = Depends(get_db)):
+    """返回热力图数据：从目标创建到今天的每日学习活跃度"""
+    g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
+    if not g:
+        return []
+
+    today = date.today()
+    start_date = g.created_at.date() if g.created_at else today - timedelta(days=365)
+    # 至少显示 84 天（约3个月），保证热力图有足够的网格
+    min_start = today - timedelta(days=83)
+    if start_date > min_start:
+        start_date = min_start
+    days_range = (today - start_date).days + 1
+
+    # 每日学习时长
+    journal_rows = db.query(JournalEntry.date, func.sum(JournalEntry.duration_minutes), func.count(JournalEntry.id)).filter(
+        JournalEntry.goal_id == goal_id,
+        JournalEntry.date >= start_date,
+    ).group_by(JournalEntry.date).all()
+    journal_map = {str(r[0]): {'minutes': r[1] or 0, 'journals': r[2]} for r in journal_rows}
+
+    # 每日完成的规划
+    plan_rows = db.query(DailyPlan.date).filter(
+        DailyPlan.goal_id == goal_id,
+        DailyPlan.completed == True,
+        DailyPlan.date >= start_date,
+    ).all()
+    plan_dates = {str(r[0]) for r in plan_rows}
+
+    # 每日答题数
+    q_rows = db.query(DailyQuestion.date, func.count(DailyQuestion.id)).filter(
+        DailyQuestion.goal_id == goal_id,
+        DailyQuestion.status == 'answered',
+        DailyQuestion.date >= start_date,
+    ).group_by(DailyQuestion.date).all()
+    question_map = {str(r[0]): r[1] for r in q_rows}
+
+    # 计算强度等级
+    def calc_level(minutes: int, has_activity: bool) -> int:
+        if minutes <= 0 and not has_activity: return 0
+        if minutes <= 0 and has_activity: return 1
+        if minutes <= 30: return 1
+        if minutes <= 60: return 2
+        if minutes <= 120: return 3
+        return 4
+
+    result = []
+    for i in range(days_range):
+        d = start_date + timedelta(days=i)
+        ds = str(d)
+        jm = journal_map.get(ds, {'minutes': 0, 'journals': 0})
+        minutes = jm['minutes']
+        has_activity = jm['journals'] > 0 or ds in plan_dates or question_map.get(ds, 0) > 0
+        result.append({
+            'date': ds,
+            'level': calc_level(minutes, has_activity),
+            'minutes': minutes,
+            'journals': jm['journals'],
+            'plan_completed': ds in plan_dates,
+            'questions': question_map.get(ds, 0),
+        })
+
+    return result
+
+
 @router.get('/knowledge-graph')
 def knowledge_graph(goal_id: int, db: Session = Depends(get_db)):
     """返回知识图谱数据：节点（阶段/主题）和边（关联关系）"""
