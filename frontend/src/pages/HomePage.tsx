@@ -155,7 +155,7 @@ export default function HomePage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="group bg-white rounded-2xl border border-gray-100 hover:border-indigo-200 hover:shadow-lg transition-all duration-300"
+              className="group relative bg-white rounded-2xl border border-gray-100 hover:border-indigo-200 hover:shadow-lg transition-all duration-300"
             >
               <Link to={`/goals/${g.id}`} className="flex items-center gap-4 p-4 no-underline text-inherit">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
@@ -185,10 +185,11 @@ export default function HomePage() {
                 <ChevronRight size={18} className="text-gray-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
               </Link>
               <button
-                onClick={() => handleDelete(g.id)}
-                className="absolute top-3 right-3 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(g.id) }}
+                className="absolute top-3 right-3 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+                title="删除此目标"
               >
-                <Trash2 size={14} />
+                <Trash2 size={16} />
               </button>
             </motion.div>
           ))}
