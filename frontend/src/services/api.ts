@@ -42,6 +42,10 @@ export const generateQuestions = (goalId: number) =>
 export const submitAnswer = (questionId: number, answer: string) =>
   http.post(`/questions/${questionId}/answer`, { answer }).then(r => r.data)
 
+// 问答历史
+export const getQuestionsHistory = (goalId: number) =>
+  http.get(`/goals/${goalId}/questions/history`).then(r => r.data)
+
 // 学习统计
 export const getStats = (goalId: number) =>
   http.get<LearningStats>(`/goals/${goalId}/stats`).then(r => r.data)

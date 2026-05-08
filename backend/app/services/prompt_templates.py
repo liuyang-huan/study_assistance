@@ -29,9 +29,29 @@ def generate_daily_plan(goal_title: str, roadmap_summary: str, current_phase: st
 近期学习日志：{recent_journals or '暂无'}
 近期问答表现：{recent_evaluations or '暂无'}
 
-请为 {date_str} 生成当天的学习规划。任务应具体可执行，时长合理（总时长不超过3小时）。
+请为 {date_str} 生成当天的学习规划（2-4个任务，总时长不超过3小时）。
+
+【重要】每个任务必须包含完整的学习材料，让用户可以直接在网页上点击学习。每个 task 必须包含 materials 字段：
+
+- summary: 一句话概括本节内容
+- key_concepts: 3-5个核心知识点，每个用一两句话解释
+- content: 详细的讲解内容（300-800字），使用 Markdown 格式，包含必要的概念解释、原理说明、代码示例（如适用）
+- example: 一个具体的应用示例或代码演示
+- practice: 一道小练习题，帮助用户检验理解
+
 返回 JSON：
-{{"tasks": [{{"title": "任务名称", "duration_min": 30, "detail": "具体内容"}}], "note": "当日学习提示"}}"""
+{{"tasks": [{{
+  "title": "任务名称",
+  "duration_min": 30,
+  "detail": "一句话描述",
+  "materials": {{
+    "summary": "本节概述",
+    "key_concepts": [{{"name": "概念名", "explanation": "解释说明"}}],
+    "content": "详细的Markdown格式学习内容，包含讲解、代码、图表描述等",
+    "example": "具体应用示例或代码演示",
+    "practice": "一道巩固练习题"
+  }}
+}}], "note": "当日学习提示"}}"""
 
 
 def generate_questions(goal_title: str, current_topic: str, difficulty: str = 'medium') -> str:

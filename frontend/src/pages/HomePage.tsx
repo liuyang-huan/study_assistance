@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getGoals, createGoal, deleteGoal } from '../services/api'
 import type { LearningGoal } from '../types'
+import { Plus, Target, Calendar, Trash2, BookOpen, Sparkles, ChevronRight } from 'lucide-react'
+import { motion } from 'framer-motion'
 
 export default function HomePage() {
   const [goals, setGoals] = useState<LearningGoal[]>([])
@@ -51,64 +53,144 @@ export default function HomePage() {
     }
   }
 
+  const statusLabel = (s: string) =>
+    s === 'active' ? '进行中' : s === 'completed' ? '已完成' : '已暂停'
+
+  const statusColor = (s: string) =>
+    s === 'active' ? 'bg-emerald-50 text-emerald-600' :
+    s === 'completed' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">我的学习目标</h1>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 cursor-pointer"
-        >
-          + 新建目标
-        </button>
+    <div className="animate-fade-in">
+      {/* Hero */}
+      <div className="text-center mb-8 pt-4">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 text-xs text-indigo-600 mb-4">
+          <Sparkles size={13} />
+          AI 驱动个人学习助手
+        </div>
+        <h1 className="text-3xl font-bold gradient-text mb-2">今天想学什么？</h1>
+        <p className="text-gray-500 text-sm">设定目标，AI 为你量身定制学习路线</p>
       </div>
 
-      {showForm && (
-        <form onSubmit={handleCreate} className="mb-6 p-4 bg-white rounded-lg shadow border border-gray-200">
-          <input
-            className="w-full mb-3 px-3 py-2 border border-gray-300 rounded-lg text-lg"
-            placeholder="想学什么？例如：学会微积分"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-          />
-          <textarea
-            className="w-full mb-3 px-3 py-2 border border-gray-300 rounded-lg"
-            placeholder="补充描述（可选）：你的基础、期望的时间等"
-            rows={3}
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-          />
+      {/* 创建表单 */}
+      <div className="max-w-lg mx-auto mb-8">
+        {!showForm ? (
           <button
-            type="submit"
-            disabled={submitting || !title.trim()}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
+            onClick={() => setShowForm(true)}
+            className="w-full p-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 hover:border-indigo-300 hover:text-indigo-500 transition-all cursor-pointer group"
           >
-            {submitting ? 'AI 正在生成学习路线...' : '创建并生成路线'}
+            <Plus size={24} className="mx-auto mb-1 group-hover:scale-110 transition-transform" />
+            <span className="text-sm">创建新的学习目标</span>
           </button>
-        </form>
-      )}
+        ) : (
+          <motion.form
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            onSubmit={handleCreate}
+            className="p-5 bg-white rounded-2xl shadow-lg border border-gray-100"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <Target size={18} className="text-indigo-500" />
+              <span className="text-sm font-medium text-gray-700">新学习目标</span>
+            </div>
+            <input
+              className="w-full mb-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-base focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+              placeholder="想学什么？例如：学会微积分"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              autoFocus
+            />
+            <textarea
+              className="w-full mb-4 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all resize-none"
+              placeholder="补充描述（可选）：你的基础、期望的时间等"
+              rows={2}
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={submitting || !title.trim()}
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 cursor-pointer font-medium text-sm transition-all shadow-md shadow-indigo-200 hover:shadow-lg hover:shadow-indigo-300"
+              >
+                {submitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    AI 生成路线中...
+                  </span>
+                ) : '创建并生成路线'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="px-4 py-2.5 text-gray-400 hover:text-gray-600 cursor-pointer text-sm"
+              >
+                取消
+              </button>
+            </div>
+          </motion.form>
+        )}
+      </div>
 
+      {/* 目标列表 */}
       {loading ? (
-        <p className="text-gray-500">加载中...</p>
+        <div className="space-y-3 max-w-lg mx-auto">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-20 rounded-2xl animate-shimmer" />
+          ))}
+        </div>
       ) : goals.length === 0 ? (
-        <p className="text-gray-500">还没有学习目标，点击上方按钮创建第一个。</p>
+        <div className="text-center py-12">
+          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+            <BookOpen size={32} className="text-gray-300" />
+          </div>
+          <p className="text-gray-400 text-sm">还没有学习目标</p>
+          <p className="text-gray-300 text-xs mt-1">点击上方按钮创建第一个</p>
+        </div>
       ) : (
-        <div className="grid gap-4">
-          {goals.map(g => (
-            <div key={g.id} className="p-4 bg-white rounded-lg shadow border border-gray-200 flex items-center justify-between">
-              <Link to={`/goals/${g.id}`} className="no-underline text-inherit flex-1">
-                <h3 className="text-lg font-semibold text-indigo-600">{g.title}</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  {g.status === 'active' ? '进行中' : g.status === 'completed' ? '已完成' : '已暂停'} · {new Date(g.created_at).toLocaleDateString('zh-CN')}
-                </p>
+        <div className="grid gap-3 max-w-lg mx-auto">
+          {goals.map((g, i) => (
+            <motion.div
+              key={g.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className="group bg-white rounded-2xl border border-gray-100 hover:border-indigo-200 hover:shadow-lg transition-all duration-300"
+            >
+              <Link to={`/goals/${g.id}`} className="flex items-center gap-4 p-4 no-underline text-inherit">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  g.status === 'active' ? 'bg-gradient-to-br from-indigo-100 to-purple-100' :
+                  g.status === 'completed' ? 'bg-gradient-to-br from-emerald-100 to-teal-100' :
+                  'bg-gray-100'
+                }`}>
+                  <Target size={18} className={
+                    g.status === 'active' ? 'text-indigo-500' :
+                    g.status === 'completed' ? 'text-emerald-500' : 'text-gray-400'
+                  } />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors truncate">
+                    {g.title}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full ${statusColor(g.status)}`}>
+                      {statusLabel(g.status)}
+                    </span>
+                    <span className="text-[11px] text-gray-400 flex items-center gap-0.5">
+                      <Calendar size={11} />
+                      {new Date(g.created_at).toLocaleDateString('zh-CN')}
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight size={18} className="text-gray-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
               </Link>
               <button
                 onClick={() => handleDelete(g.id)}
-                className="ml-4 px-3 py-1 text-red-500 hover:text-red-700 cursor-pointer text-sm"
+                className="absolute top-3 right-3 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
               >
-                删除
+                <Trash2 size={14} />
               </button>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}

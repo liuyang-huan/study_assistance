@@ -19,8 +19,10 @@ export default function StatsPanel({ goalId }: { goalId: number }) {
   }
   if (!stats) return null
 
-  const scoreMax = Math.max(...stats.score_trend.map(s => s.score), 10)
-  const minuteMax = Math.max(...stats.study_trend.map(s => s.minutes), 60)
+  const scores = stats.score_trend.map(s => s.score)
+  const scoreMax = scores.length > 0 ? Math.max(...scores, 10) : 10
+  const minutes = stats.study_trend.map(s => s.minutes)
+  const minuteMax = minutes.length > 0 ? Math.max(...minutes, 60) : 60
 
   return (
     <div className="space-y-5">

@@ -1,7 +1,10 @@
 import json
+import logging
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from ..database import get_db
 from ..models.goal import LearningGoal
@@ -97,8 +100,8 @@ def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
         )}])
         dp = DailyPlan(goal_id=g.id, date=date.today(), plan_content=json.dumps(plan_json, ensure_ascii=False))
         db.add(dp)
-    except Exception as e:
-        pass  # AI 生成失败不影响目标创建
+    except Exception:
+        logger.exception('AI 生成路线/规划失败')
 
     db.commit()
     db.refresh(g)
