@@ -1,7 +1,7 @@
 import axios from 'axios'
 import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQuestion, LearningStats } from '../types'
 
-const http = axios.create({ baseURL: 'http://localhost:8000/api' })
+const http = axios.create({ baseURL: 'http://localhost:8000/api', timeout: 90000 })
 
 // 学习目标
 export const getGoals = () => http.get<LearningGoal[]>('/goals').then(r => r.data)
@@ -61,6 +61,10 @@ export const exportJournal = (goalId: number) =>
   http.get(`/goals/${goalId}/export/journal`, { responseType: 'blob' }).then(r => r.data)
 export const exportAll = (goalId: number) =>
   http.get(`/goals/${goalId}/export/all`, { responseType: 'blob' }).then(r => r.data)
+
+// AI 学习搭子
+export const chatWithBuddy = (goalId: number, data: { message: string; context: string; chat_history: { role: string; content: string }[] }) =>
+  http.post<{ reply: string }>(`/goals/${goalId}/chat`, data).then(r => r.data)
 
 export function downloadBlob(data: Blob, filename: string) {
   const url = URL.createObjectURL(data)

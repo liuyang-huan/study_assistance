@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   getGoal, generateRoadmap, generatePlan, completePlan,
@@ -49,7 +49,7 @@ export default function GoalDetail() {
   const [selectedTask, setSelectedTask] = useState<any>(null)
   const [modalLoading, setModalLoading] = useState(false)
   const [modalError, setModalError] = useState('')
-  const [retryTopic, setRetryTopic] = useState<{ day: number; title: string } | null>(null)
+  const pendingTopicRef = useRef<{ day: number; title: string } | null>(null)
   const [showGraph, setShowGraph] = useState(false)
   const [topicLoading, setTopicLoading] = useState<number | null>(null)
 
@@ -124,10 +124,10 @@ export default function GoalDetail() {
   })
 
   const handleLearnTopic = async (topicDay: number, topicTitle: string) => {
+    pendingTopicRef.current = { day: topicDay, title: topicTitle }
     setTopicLoading(topicDay)
     setModalLoading(true)
     setModalError('')
-    setRetryTopic({ day: topicDay, title: topicTitle })
     setSelectedTask({
       title: topicTitle,
       duration_min: 30,
@@ -145,9 +145,9 @@ export default function GoalDetail() {
         materials: materials.materials,
       })
     } catch (e: any) {
-      console.error('生成学习材料失败', e)
       setModalLoading(false)
       setModalError(e?.response?.data?.detail || e?.message || 'AI 服务响应异常，请稍后重试')
+      // 保留 selectedTask 不清空，弹窗保持打开以显示错误和重试入口
     } finally {
       setTopicLoading(null)
     }
@@ -735,11 +735,16 @@ export default function GoalDetail() {
         {selectedTask && (
           <LearningModal
             task={selectedTask}
+            goalId={+id!}
+            goalTitle={goal?.title || ''}
             onClose={() => { setSelectedTask(null); setModalLoading(false); setModalError('') }}
             onRegenerate={handleGeneratePlan}
             loading={modalLoading}
             error={modalError}
-            onRetry={retryTopic ? () => handleLearnTopic(retryTopic.day, retryTopic.title) : undefined}
+            onRetry={() => {
+              const pt = pendingTopicRef.current
+              if (pt) handleLearnTopic(pt.day, pt.title)
+            }}
           />
         )}
       </AnimatePresence>
