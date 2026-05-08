@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .database import engine, Base
-from .routers import goals, roadmap, journal, questions, plans, stats
+from .routers import goals, roadmap, journal, questions, plans, stats, export
 
 # 自动建表
 Base.metadata.create_all(bind=engine)
@@ -32,6 +32,7 @@ app.include_router(journal.router)
 app.include_router(questions.router)
 app.include_router(plans.router)
 app.include_router(stats.router)
+app.include_router(export.router)
 
 
 @app.get('/api/health')

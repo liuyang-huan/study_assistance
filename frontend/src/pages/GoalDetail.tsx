@@ -3,14 +3,17 @@ import { useParams, Link } from 'react-router-dom'
 import {
   getGoal, generateRoadmap, generatePlan, completePlan,
   generateQuestions, submitAnswer, saveJournal, getPlans, getQuestions,
+  exportRoadmap, exportPlan, exportJournal, downloadBlob,
 } from '../services/api'
 import StatsPanel from '../components/StatsPanel'
 import LearningModal from '../components/LearningModal'
+import KnowledgeGraph from '../components/KnowledgeGraph'
 import type { GoalDetail as GoalDetailType } from '../types'
 import {
   ArrowLeft, Target, RefreshCw, Calendar, Sparkles, CheckCircle2,
   BookOpen, MessageCircle, Clock, BarChart3, Send, Loader2, PenLine,
-  ChevronDown, ChevronUp, AlertCircle, Play, FileText, Brain
+  ChevronDown, ChevronUp, AlertCircle, Play, FileText, Brain, GitBranch,
+  Download
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -44,6 +47,7 @@ export default function GoalDetail() {
 
   const [actionLoading, setActionLoading] = useState('')
   const [selectedTask, setSelectedTask] = useState<any>(null)
+  const [showGraph, setShowGraph] = useState(false)
 
   const loadGoal = async () => {
     if (!id) return
@@ -193,6 +197,10 @@ export default function GoalDetail() {
             </div>
           </div>
           <div className="flex gap-2">
+            <button onClick={() => setShowGraph(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-sm border border-gray-200 rounded-xl hover:bg-gray-50 cursor-pointer bg-white transition-all">
+              <GitBranch size={14} /> 知识图谱
+            </button>
             <button onClick={handleGenerateRoadmap} disabled={!!actionLoading}
               className="flex items-center gap-1.5 px-3.5 py-2 text-sm border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-50 cursor-pointer bg-white transition-all">
               <RefreshCw size={14} className={actionLoading === '生成路线' ? 'animate-spin' : ''} />
@@ -218,11 +226,19 @@ export default function GoalDetail() {
 
       {/* 学习路线 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
-        <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <BookOpen size={18} className="text-indigo-500" />
-          学习路线
-          {goal.roadmap && <span className="text-xs text-gray-400 font-normal bg-gray-100 px-2 py-0.5 rounded-full">v{goal.roadmap.version}</span>}
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+            <BookOpen size={18} className="text-indigo-500" />
+            学习路线
+            {goal.roadmap && <span className="text-xs text-gray-400 font-normal bg-gray-100 px-2 py-0.5 rounded-full">v{goal.roadmap.version}</span>}
+          </h2>
+          {phases.length > 0 && (
+            <button onClick={() => exportRoadmap(+id!).then(b => downloadBlob(b, '学习路线.md'))}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer transition-all">
+              <Download size={12} /> 导出
+            </button>
+          )}
+        </div>
         {phases.length === 0 ? (
           <div className="text-center py-8">
             <BookOpen size={40} className="mx-auto mb-3 text-gray-200" />
@@ -275,6 +291,14 @@ export default function GoalDetail() {
               <span className="text-[11px] text-gray-400 font-normal ml-1">点击任务开始学习</span>
             )}
           </h2>
+          <div className="flex items-center gap-1">
+            {currentPlan && (
+              <button onClick={() => exportPlan(+id!, planDate).then(b => downloadBlob(b, `学习规划_${planDate}.md`))}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer transition-all">
+                <Download size={12} /> 导出
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-1.5">
             <button onClick={() => setPlanDate(d => {
               const dt = new Date(d); dt.setDate(dt.getDate() - 1); return dt.toISOString().slice(0, 10)
@@ -475,10 +499,16 @@ export default function GoalDetail() {
 
       {/* 学习日志 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
-        <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <PenLine size={18} className="text-indigo-500" />
-          {isToday ? '今日学习心得' : `${fmtDate(planDate)} 记录`}
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+            <PenLine size={18} className="text-indigo-500" />
+            {isToday ? '今日学习心得' : `${fmtDate(planDate)} 记录`}
+          </h2>
+          <button onClick={() => exportJournal(+id!).then(b => downloadBlob(b, '学习日志.md'))}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer transition-all">
+            <Download size={12} /> 导出
+          </button>
+        </div>
         {goal.today_journal && isToday ? (
           <div className="space-y-3">
             <div className="p-4 bg-gray-50 rounded-xl">
@@ -544,6 +574,16 @@ export default function GoalDetail() {
             task={selectedTask}
             onClose={() => setSelectedTask(null)}
             onRegenerate={handleGeneratePlan}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* 知识图谱 */}
+      <AnimatePresence>
+        {showGraph && (
+          <KnowledgeGraph
+            goalId={+id!}
+            onClose={() => setShowGraph(false)}
           />
         )}
       </AnimatePresence>

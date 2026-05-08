@@ -46,6 +46,31 @@ export const submitAnswer = (questionId: number, answer: string) =>
 export const getQuestionsHistory = (goalId: number) =>
   http.get(`/goals/${goalId}/questions/history`).then(r => r.data)
 
+// 知识图谱
+export const getKnowledgeGraph = (goalId: number) =>
+  http.get<{ nodes: any[]; edges: any[] }>(`/goals/${goalId}/knowledge-graph`).then(r => r.data)
+
+// 内容导出
+export const exportRoadmap = (goalId: number) =>
+  http.get(`/goals/${goalId}/export/roadmap`, { responseType: 'blob' }).then(r => r.data)
+export const exportPlan = (goalId: number, date?: string) =>
+  http.get(`/goals/${goalId}/export/plan`, { params: { date }, responseType: 'blob' }).then(r => r.data)
+export const exportJournal = (goalId: number) =>
+  http.get(`/goals/${goalId}/export/journal`, { responseType: 'blob' }).then(r => r.data)
+export const exportAll = (goalId: number) =>
+  http.get(`/goals/${goalId}/export/all`, { responseType: 'blob' }).then(r => r.data)
+
+export function downloadBlob(data: Blob, filename: string) {
+  const url = URL.createObjectURL(data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 // 学习统计
 export const getStats = (goalId: number) =>
   http.get<LearningStats>(`/goals/${goalId}/stats`).then(r => r.data)
