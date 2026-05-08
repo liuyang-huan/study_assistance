@@ -1,10 +1,7 @@
 import json
-import logging
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-
-logger = logging.getLogger(__name__)
 
 from ..database import get_db
 from ..models.goal import LearningGoal
@@ -13,8 +10,6 @@ from ..models.plan import DailyPlan
 from ..models.question import DailyQuestion
 from ..models.journal import JournalEntry
 from ..schemas.api import GoalCreate, GoalUpdate, GoalResponse, GoalDetailResponse
-from ..services.ai_service import chat_json
-from ..services.prompt_templates import generate_roadmap as roadmap_prompt, generate_daily_plan
 
 router = APIRouter(prefix='/api/goals', tags=['goals'])
 
@@ -82,34 +77,13 @@ def list_goals(db: Session = Depends(get_db)):
 def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
     g = LearningGoal(title=data.title, description=data.description)
     db.add(g)
-    db.flush()
-
-    # AI 生成学习路线
-    try:
-        result = chat_json([{'role': 'user', 'content': roadmap_prompt(data.title, data.description)}])
-        rm = Roadmap(goal_id=g.id, content=json.dumps(result, ensure_ascii=False), version=1)
-        db.add(rm)
-        db.flush()
-
-        # 生成今日规划
-        plan_json = chat_json([{'role': 'user', 'content': generate_daily_plan(
-            goal_title=data.title,
-            roadmap_summary=json.dumps(result, ensure_ascii=False)[:3000],
-            current_phase=result.get('phases', [{}])[0].get('title', '开始阶段') if result.get('phases') else '开始阶段',
-            date_str=str(date.today()),
-        )}])
-        dp = DailyPlan(goal_id=g.id, date=date.today(), plan_content=json.dumps(plan_json, ensure_ascii=False))
-        db.add(dp)
-    except Exception:
-        logger.exception('AI 生成路线/规划失败')
-
     db.commit()
     db.refresh(g)
 
     return {
         **_goal_to_response(g),
-        'roadmap': _get_roadmap(db, g.id),
-        'today_plan': _get_today_plan(db, g.id),
+        'roadmap': None,
+        'today_plan': None,
         'today_questions': [],
         'today_journal': None,
     }

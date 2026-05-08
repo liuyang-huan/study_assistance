@@ -37,9 +37,6 @@ def generate_roadmap(goal_id: int, db: Session = Depends(get_db)):
     if not g:
         raise HTTPException(status_code=404, detail='目标不存在')
 
-    # 取消旧版本
-    db.query(Roadmap).filter(Roadmap.goal_id == goal_id).update({'is_active': False})
-
     # 获取近期学习记录用于调整
     recent_journals = db.query(JournalEntry).filter(
         JournalEntry.goal_id == goal_id
@@ -51,7 +48,6 @@ def generate_roadmap(goal_id: int, db: Session = Depends(get_db)):
 
     # 判断是全新生成还是调整
     if recent_journals or recent_answers:
-        # 基于已有路线调整
         old_rm = db.query(Roadmap).filter(Roadmap.goal_id == goal_id).order_by(Roadmap.version.desc()).first()
         if old_rm:
             journal_text = '\n'.join([f'{j.date}: {j.reflection or j.content[:200]}' for j in recent_journals])
@@ -67,8 +63,14 @@ def generate_roadmap(goal_id: int, db: Session = Depends(get_db)):
     else:
         prompt = roadmap_prompt(g.title, g.description)
 
+    # 取消旧版本（先提交，释放写锁）
+    db.query(Roadmap).filter(Roadmap.goal_id == goal_id).update({'is_active': False})
+    db.commit()
+
+    # AI 调用（耗时较长，不在事务中持有锁）
     result = chat_json([{'role': 'user', 'content': prompt}])
 
+    # 插入新版本
     max_version = db.query(Roadmap).filter(Roadmap.goal_id == goal_id).order_by(Roadmap.version.desc()).first()
     new_version = (max_version.version + 1) if max_version else 1
     rm = Roadmap(goal_id=goal_id, content=json.dumps(result, ensure_ascii=False), version=new_version)

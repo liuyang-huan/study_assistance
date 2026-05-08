@@ -53,6 +53,11 @@ export default function GoalDetail() {
   const [showGraph, setShowGraph] = useState(false)
   const [topicLoading, setTopicLoading] = useState<number | null>(null)
 
+  // 新创建目标时自动生成路线和规划
+  const [autoGenStage, setAutoGenStage] = useState<'idle' | 'roadmap' | 'plan' | 'done' | 'error'>('idle')
+  const [autoGenError, setAutoGenError] = useState('')
+  const autoGenTried = useRef(false)
+
   // 已学习的主题天数（localStorage 持久化，突破每日规划限制）
   const learnedKey = `learned-days-${id}`
   const [learnedDays, setLearnedDays] = useState<Set<number>>(() => {
@@ -102,6 +107,37 @@ export default function GoalDetail() {
       setLoadingPlan(false)
     }
   }
+
+  // 自动生成路线 + 规划（新创建目标时用）
+  const startAutoGenerate = async () => {
+    if (!id || autoGenTried.current) return
+    autoGenTried.current = true
+    setAutoGenStage('roadmap')
+    setAutoGenError('')
+    try {
+      await generateRoadmap(+id)
+      setAutoGenStage('plan')
+      try {
+        await generatePlan(+id)
+        setAutoGenStage('done')
+      } catch {
+        setAutoGenError('今日规划生成失败，可稍后手动生成')
+        setAutoGenStage('done')
+      }
+      await loadGoal()
+      await loadPlan(todayStr())
+    } catch (e: any) {
+      setAutoGenStage('error')
+      setAutoGenError(e?.response?.data?.detail || e?.message || 'AI 服务响应异常，请稍后重试')
+    }
+  }
+
+  // 新创建目标检测：无路线时自动触发生成
+  useEffect(() => {
+    if (goal && !goal.roadmap && !loading && autoGenStage === 'idle') {
+      startAutoGenerate()
+    }
+  }, [goal, loading])
 
   useEffect(() => { loadGoal(); loadPlan(planDate) }, [id])
   useEffect(() => { loadPlan(planDate) }, [planDate])
@@ -298,14 +334,65 @@ export default function GoalDetail() {
           )}
         </div>
         {phases.length === 0 ? (
-          <div className="text-center py-8">
-            <BookOpen size={40} className="mx-auto mb-3 text-gray-200" />
-            <p className="text-gray-400 text-sm mb-4">暂无学习路线</p>
-            <button onClick={handleGenerateRoadmap} disabled={!!actionLoading}
-              className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 text-sm cursor-pointer transition-all shadow-md shadow-indigo-200 font-medium">
-              生成路线
-            </button>
-          </div>
+          autoGenStage !== 'idle' ? (
+            <div className="text-center py-8">
+              {autoGenStage === 'roadmap' && (
+                <div>
+                  <Loader2 size={44} className="mx-auto mb-4 text-indigo-400 animate-spin" />
+                  <p className="text-gray-700 font-semibold mb-1">AI 正在生成学习路线</p>
+                  <p className="text-gray-400 text-sm mb-3">分析学习目标，规划最优路径...</p>
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 rounded-full">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                    <span className="text-xs text-indigo-500">约需 20-40 秒</span>
+                  </div>
+                </div>
+              )}
+              {autoGenStage === 'plan' && (
+                <div>
+                  <Loader2 size={44} className="mx-auto mb-4 text-emerald-400 animate-spin" />
+                  <p className="text-gray-700 font-semibold mb-1">学习路线已生成</p>
+                  <p className="text-gray-400 text-sm mb-3">正在为你准备今日学习规划...</p>
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 rounded-full">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs text-emerald-600">约需 10-20 秒</span>
+                  </div>
+                </div>
+              )}
+              {autoGenStage === 'done' && (
+                <div>
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <CheckCircle2 size={28} className="text-emerald-500" />
+                  </div>
+                  <p className="text-gray-700 font-semibold mb-1">一切就绪！</p>
+                  <p className="text-gray-400 text-sm">{autoGenError || '学习路线和今日规划已生成'}</p>
+                </div>
+              )}
+              {autoGenStage === 'error' && (
+                <div>
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
+                    <AlertCircle size={28} className="text-red-400" />
+                  </div>
+                  <p className="text-gray-700 font-semibold mb-1">生成失败</p>
+                  <p className="text-gray-400 text-sm mb-5 max-w-sm mx-auto">{autoGenError}</p>
+                  <button
+                    onClick={() => { autoGenTried.current = false; setAutoGenStage('idle'); startAutoGenerate() }}
+                    className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 text-sm cursor-pointer transition-all shadow-md shadow-indigo-200 font-medium"
+                  >
+                    重新生成
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <BookOpen size={40} className="mx-auto mb-3 text-gray-200" />
+              <p className="text-gray-400 text-sm mb-4">暂无学习路线</p>
+              <button onClick={handleGenerateRoadmap} disabled={!!actionLoading}
+                className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 text-sm cursor-pointer transition-all shadow-md shadow-indigo-200 font-medium">
+                生成路线
+              </button>
+            </div>
+          )
         ) : (
           <div className="space-y-2">
             {phases.map((p: any, i: number) => (

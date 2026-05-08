@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { getGoals, createGoal, deleteGoal } from '../services/api'
 import type { LearningGoal } from '../types'
 import { Plus, Target, Calendar, Trash2, BookOpen, Sparkles, ChevronRight } from 'lucide-react'
@@ -12,6 +12,8 @@ export default function HomePage() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  const navigate = useNavigate()
 
   const loadGoals = async () => {
     try {
@@ -31,11 +33,11 @@ export default function HomePage() {
     if (!title.trim()) return
     setSubmitting(true)
     try {
-      await createGoal({ title, description })
+      const goal = await createGoal({ title, description })
       setTitle('')
       setDescription('')
       setShowForm(false)
-      await loadGoals()
+      navigate(`/goals/${goal.id}`)
     } catch (e) {
       console.error('创建失败', e)
     } finally {
