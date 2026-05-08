@@ -56,10 +56,38 @@ export interface DailyPlan {
   created_at: string
 }
 
+export interface KeyConcept {
+  name: string
+  explanation: string
+}
+
+export interface Example {
+  title: string
+  description: string
+  code: string
+}
+
+export interface PracticeQuestion {
+  question: string
+  hint: string
+}
+
+export interface Materials {
+  summary?: string
+  learning_objectives?: string[]
+  key_concepts?: KeyConcept[]
+  content?: string
+  example?: string
+  practice?: string
+  examples?: Example[]
+  practice_questions?: PracticeQuestion[]
+}
+
 export interface PlanTask {
   title: string
   duration_min: number
   detail: string
+  materials?: Materials
 }
 
 export interface DailyQuestion {

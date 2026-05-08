@@ -12,12 +12,26 @@ interface KeyConcept {
   explanation: string
 }
 
+interface Example {
+  title: string
+  description: string
+  code: string
+}
+
+interface PracticeQuestion {
+  question: string
+  hint: string
+}
+
 interface Materials {
   summary?: string
+  learning_objectives?: string[]
   key_concepts?: KeyConcept[]
   content?: string
-  example?: string
-  practice?: string
+  example?: string  // 旧字段，兼容
+  practice?: string  // 旧字段，兼容
+  examples?: Example[]
+  practice_questions?: PracticeQuestion[]
 }
 
 interface TaskInfo {
@@ -48,6 +62,7 @@ function renderMarkdown(text: string) {
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded text-xs font-mono">$1</code>')
     .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="bg-gray-900 text-gray-100 p-4 rounded-xl text-xs overflow-x-auto my-3 font-mono leading-relaxed">$2</pre>')
+    .replace(/^> (.+)/gm, '<blockquote class="border-l-4 border-indigo-300 bg-indigo-50/50 pl-4 py-2 my-2 rounded-r-lg text-sm text-gray-700 italic">$1</blockquote>')
     .replace(/^- (.+)/gm, '<li class="ml-4 text-sm text-gray-700 list-disc">$1</li>')
     .replace(/^(\d+)\. (.+)/gm, '<li class="ml-4 text-sm text-gray-700 list-decimal">$1. $2</li>')
     .replace(/\n\n/g, '<br/><br/>')
@@ -137,7 +152,14 @@ export default function LearningModal({
 
   // 滚动监听，高亮当前章节
   const contentRef = useRef<HTMLDivElement>(null)
-  const sections = ['summary', ...(m?.key_concepts?.length ? ['concepts'] : []), 'content', ...(m?.example ? ['example'] : []), ...(m?.practice ? ['practice'] : [])]
+  const sections = [
+    ...(m?.learning_objectives?.length ? ['objectives'] : []),
+    'summary',
+    ...(m?.key_concepts?.length ? ['concepts'] : []),
+    'content',
+    ...(m?.examples?.length ? ['examples'] : (m?.example ? ['example'] : [])),
+    ...(m?.practice_questions?.length ? ['practice_qs'] : (m?.practice ? ['practice'] : [])),
+  ]
 
   const onScroll = useCallback(() => {
     const el = contentRef.current
@@ -212,17 +234,23 @@ export default function LearningModal({
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
           {sections.map((id) => {
             const labels: Record<string, string> = {
+              objectives: '学习目标',
               summary: '本节概述',
               concepts: '核心知识点',
               content: '学习内容',
+              examples: '示例演示',
               example: '示例演示',
+              practice_qs: '巩固练习',
               practice: '巩固练习',
             }
             const icons: Record<string, JSX.Element> = {
+              objectives: <Target size={12} />,
               summary: <Lightbulb size={12} />,
               concepts: <Target size={12} />,
               content: <BookOpen size={12} />,
+              examples: <Code size={12} />,
               example: <Code size={12} />,
+              practice_qs: <PenLine size={12} />,
               practice: <PenLine size={12} />,
             }
             return (
@@ -344,6 +372,27 @@ export default function LearningModal({
               )
             ) : (
               <>
+                {/* 学习目标 */}
+                {m.learning_objectives && m.learning_objectives.length > 0 && (
+                  <section id="sec-objectives">
+                    <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                      <Target size={16} className="text-emerald-500" /> 学习目标
+                    </h3>
+                    <div className="bg-emerald-50 rounded-2xl border border-emerald-100 p-5">
+                      <ul className="space-y-2">
+                        {m.learning_objectives.map((obj, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                            <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-700 flex items-center justify-center shrink-0 text-[10px] font-bold mt-0.5">
+                              {i + 1}
+                            </span>
+                            <span className="leading-relaxed">{obj}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </section>
+                )}
+
                 {/* 概述 */}
                 {m.summary && (
                   <section id="sec-summary">
@@ -387,8 +436,8 @@ export default function LearningModal({
                   </section>
                 )}
 
-                {/* 示例 */}
-                {m.example && (
+                {/* 示例（旧版兼容） */}
+                {m.example && !m.examples && (
                   <section id="sec-example">
                     <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
                       <Code size={16} className="text-indigo-500" /> 示例演示
@@ -401,8 +450,37 @@ export default function LearningModal({
                   </section>
                 )}
 
-                {/* 练习 */}
-                {m.practice && (
+                {/* 多示例（新版） */}
+                {m.examples && m.examples.length > 0 && (
+                  <section id="sec-examples">
+                    <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                      <Code size={16} className="text-indigo-500" /> 示例演示
+                    </h3>
+                    <div className="space-y-4">
+                      {m.examples.map((ex, i) => (
+                        <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                          <div className="px-5 py-3 bg-indigo-50/50 border-b border-indigo-100 flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-md bg-indigo-500 text-white flex items-center justify-center text-[10px] font-bold">
+                              {i + 1}
+                            </span>
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-800">{ex.title}</h4>
+                              <p className="text-[11px] text-gray-500">{ex.description}</p>
+                            </div>
+                          </div>
+                          {ex.code && (
+                            <div className="p-5 bg-gray-900 overflow-x-auto">
+                              <pre className="text-xs text-gray-100 font-mono leading-relaxed whitespace-pre-wrap">{ex.code}</pre>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* 练习（旧版兼容） */}
+                {m.practice && !m.practice_questions && (
                   <section id="sec-practice">
                     <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
                       <PenLine size={16} className="text-indigo-500" /> 巩固练习
@@ -411,6 +489,38 @@ export default function LearningModal({
                       <div className="text-sm text-gray-700 leading-relaxed">
                         {renderMarkdown(m.practice)}
                       </div>
+                    </div>
+                  </section>
+                )}
+
+                {/* 多练习题（新版） */}
+                {m.practice_questions && m.practice_questions.length > 0 && (
+                  <section id="sec-practice_qs">
+                    <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                      <PenLine size={16} className="text-indigo-500" /> 巩固练习
+                    </h3>
+                    <div className="space-y-3">
+                      {m.practice_questions.map((q, i) => (
+                        <details key={i} className="group bg-white rounded-xl border border-amber-100 shadow-sm overflow-hidden">
+                          <summary className="px-5 py-3 flex items-start gap-3 cursor-pointer hover:bg-amber-50/50 transition-colors list-none">
+                            <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                              {i + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-800">{q.question}</p>
+                            </div>
+                            <ChevronRight size={14} className="text-gray-300 group-open:rotate-90 transition-transform shrink-0 mt-1" />
+                          </summary>
+                          {q.hint && (
+                            <div className="px-5 pb-4 pt-1 border-t border-amber-50">
+                              <p className="text-xs text-amber-700 flex items-start gap-1.5">
+                                <Lightbulb size={12} className="shrink-0 mt-0.5" />
+                                <span>{q.hint}</span>
+                              </p>
+                            </div>
+                          )}
+                        </details>
+                      ))}
                     </div>
                   </section>
                 )}
