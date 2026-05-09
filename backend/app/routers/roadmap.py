@@ -118,9 +118,8 @@ def learn_topic(goal_id: int, topic_day: int, db: Session = Depends(get_db)):
         phase_context=phase_context,
     )
 
+    # 1. 先查缓存（已由预加载机制提前生成）
     cache_key = f'topic_{topic_day}'
-
-    # 1. 先查缓存
     cached = db.query(ContentCache).filter(
         ContentCache.goal_id == goal_id,
         ContentCache.cache_type == 'material',
@@ -132,17 +131,6 @@ def learn_topic(goal_id: int, topic_day: int, db: Session = Depends(get_db)):
     # 2. 缓存未命中，调 AI
     try:
         result = chat_json([{'role': 'user', 'content': prompt}], timeout=50.0)
+        return result
     except Exception as e:
         raise HTTPException(status_code=502, detail=f'AI 服务暂时不可用：{str(e)[:100]}')
-
-    # 3. 写入缓存
-    cache_entry = ContentCache(
-        goal_id=goal_id,
-        cache_type='material',
-        cache_key=cache_key,
-        content=json.dumps(result, ensure_ascii=False),
-    )
-    db.add(cache_entry)
-    db.commit()
-
-    return result
