@@ -176,7 +176,13 @@ export default function GoalDetail() {
       setModalError('')
       // 验证 AI 返回的材料是否有效（非空对象）
       const m = materials.materials
-      if (!m || (typeof m === 'object' && !m.summary && !m.content && !m.example && !m.practice && !(m.key_concepts?.length > 0))) {
+      if (!m || typeof m !== 'object' || !(
+        m.summary || m.content || m.example || m.practice ||
+        (m.key_concepts?.length > 0) ||
+        (m.learning_objectives?.length > 0) ||
+        (m.examples?.length > 0) ||
+        (m.practice_questions?.length > 0)
+      )) {
         setModalError('AI 返回的学习材料为空，请重试')
         return
       }

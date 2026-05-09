@@ -88,33 +88,29 @@ def generate_topic_materials(goal_title: str, topic_title: str, phase_context: s
 当前学习主题：{topic_title}
 所在阶段：{phase_context}
 
-请为这个主题生成一份详尽、生动的学习材料。不要敷衍，要像真正的教材一样有深度和层次感。
+请为这个主题生成一份精炼的学习材料。控制总长度，突出重点。
 
-重要：content 正文至少 800-1500 字，必须按以下结构组织（用 Markdown 二级标题）：
-  ## 基础概念 — 用通俗语言解释核心概念，假设读者是新手
-  ## 深入理解 — 剖析原理、机制、为什么这样设计
-  ## 实际应用 — 真实项目/场景中的使用方式
-  ## 常见误区 — 2-3 个初学者常犯的错误及正确做法
+content 正文 400-600 字，按以下结构组织（用 Markdown 二级标题）：
+  ## 基础概念 — 用通俗语言解释核心概念
+  ## 深入理解 — 剖析原理和设计思路
+  ## 实际应用 — 真实场景中的使用方式
+  ## 常见误区 — 1-2 个初学者常犯的错误
 
-examples 至少 2-3 个递进示例（由浅入深）：
-  - 基础示例：能 5 分钟看懂的最简示例
-  - 进阶示例：解决一个实际问题的示例
-  - 综合示例：融合多个相关知识点的完整示例
+examples 给 1-2 个由浅入深的示例，每个含 title/description/code。
 
-practice_questions 至少 3 道练习题，从易到难，每题包含题目 + 思路提示。
+practice_questions 给 1-2 道练习题，每题含 question/hint。
+key_concepts 给 2-3 个核心知识点。
+learning_objectives 给 2-3 条。
 
-key_concepts 至少 3-5 个核心知识点。
-learning_objectives 列出 3-5 条：学完本节后应掌握的能力。
-
-返回 JSON：
+返回 JSON（不要 Markdown 代码块标记）：
 {{
   "title": "{topic_title}",
   "duration_min": 45,
   "detail": "一句话描述",
   "materials": {{
-    "summary": "本节概述（2-3句话）",
-    "learning_objectives": ["学完后能...", "学完后能..."],
-    "key_concepts": [{{"name": "概念名", "explanation": "2-3句话解释，通俗易懂"}}],
+    "summary": "本节概述（1-2句话）",
+    "learning_objectives": ["学完后能..."],
+    "key_concepts": [{{"name": "概念名", "explanation": "2-3句话解释"}}],
     "content": "## 基础概念\\n...\\n\\n## 深入理解\\n...\\n\\n## 实际应用\\n...\\n\\n## 常见误区\\n...",
     "examples": [{{"title": "示例标题", "description": "简要说明", "code": "代码或详细内容"}}],
     "practice_questions": [{{"question": "题目", "hint": "思路提示"}}]

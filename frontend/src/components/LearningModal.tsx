@@ -129,6 +129,20 @@ export default function LearningModal({
   const m = task.materials
   const [activeSection, setActiveSection] = useState<string>('summary')
 
+  // 加载计时
+  const [loadElapsed, setLoadElapsed] = useState(0)
+  const loadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    if (loading) {
+      setLoadElapsed(0)
+      loadTimerRef.current = setInterval(() => setLoadElapsed(s => s + 1), 1000)
+    } else {
+      if (loadTimerRef.current) { clearInterval(loadTimerRef.current); loadTimerRef.current = null }
+      setLoadElapsed(0)
+    }
+    return () => { if (loadTimerRef.current) clearInterval(loadTimerRef.current) }
+  }, [loading])
+
   // 番茄钟 — 进入页面自动开始计时
   const pomodoroDuration = Math.max(task.duration_min, 5) * 60
   const [timerSeconds, setTimerSeconds] = useState(pomodoroDuration)
@@ -403,7 +417,12 @@ export default function LearningModal({
                 <div className="text-center py-20">
                   <Loader2 size={48} className="mx-auto mb-5 text-indigo-400 animate-spin" />
                   <p className="text-gray-500 font-medium mb-1">AI 正在生成学习材料...</p>
-                  <p className="text-gray-400 text-sm mb-6">请耐心等待，约需 10-30 秒</p>
+                  <p className="text-gray-400 text-sm mb-2">预计需要 30-60 秒，已等待 {loadElapsed} 秒</p>
+                  <p className="text-gray-300 text-xs mb-6">AI 正在深度分析主题并撰写内容，请耐心等待</p>
+                  <button onClick={onClose}
+                    className="px-4 py-2 bg-gray-100 text-gray-500 rounded-xl hover:bg-gray-200 cursor-pointer text-sm transition-all">
+                    取消等待
+                  </button>
                 </div>
               ) : error ? (
                 <div className="text-center py-16">

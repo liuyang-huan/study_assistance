@@ -117,7 +117,7 @@ def learn_topic(goal_id: int, topic_day: int, db: Session = Depends(get_db)):
         phase_context=phase_context,
     )
     try:
-        result = chat_json([{'role': 'user', 'content': prompt}])
+        result = chat_json([{'role': 'user', 'content': prompt}], timeout=50.0)
         return result
     except Exception as e:
         raise HTTPException(status_code=502, detail=f'AI 服务暂时不可用：{str(e)[:100]}')
