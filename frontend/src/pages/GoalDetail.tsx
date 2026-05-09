@@ -4,6 +4,7 @@ import {
   getGoal, generateRoadmap, generatePlan, completePlan,
   generateQuestions, submitAnswer, saveJournal, getPlans, getQuestions,
   exportRoadmap, exportPlan, exportJournal, downloadBlob, learnTopic, getLearnedTopics, markTopicLearned, markTopicsUpTo,
+  chatWithBuddy,
 } from '../services/api'
 import StatsPanel from '../components/StatsPanel'
 import LearningModal from '../components/LearningModal'
@@ -19,24 +20,33 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 // 学习材料预缓存（模块级，跨渲染保持）
 const materialsCache = new Map<string, any>()
-const pendingPreCache = new Set<string>()  // 防止重复预加载
+const pendingPreCache = new Map<string, Promise<any>>()  // 存储进行中的预加载 Promise
 
 function cacheKey(goalId: number, day: number) { return `${goalId}_${day}` }
 
-async function preCacheTopic(goalId: number, topicDay: number) {
+function preCacheTopic(goalId: number, topicDay: number): Promise<any> {
   const key = cacheKey(goalId, topicDay)
-  if (materialsCache.has(key) || pendingPreCache.has(key)) return
-  pendingPreCache.add(key)
-  try {
-    const data = await learnTopic(goalId, topicDay)
+  if (materialsCache.has(key)) return Promise.resolve(materialsCache.get(key))
+  const pending = pendingPreCache.get(key)
+  if (pending) return pending  // 复用进行中的请求
+  const promise = learnTopic(goalId, topicDay).then(data => {
     materialsCache.set(key, data)
-  } catch {} finally {
     pendingPreCache.delete(key)
-  }
+    return data
+  }).catch(() => {
+    pendingPreCache.delete(key)
+    return null
+  })
+  pendingPreCache.set(key, promise)
+  return promise
 }
 
 function getCachedTopic(goalId: number, topicDay: number) {
   return materialsCache.get(cacheKey(goalId, topicDay)) || null
+}
+
+function getPendingPreCache(goalId: number, topicDay: number) {
+  return pendingPreCache.get(cacheKey(goalId, topicDay)) || null
 }
 
 function clearCachedTopic(goalId: number, topicDay: number) {
@@ -78,6 +88,12 @@ export default function GoalDetail() {
   const pendingTopicRef = useRef<{ day: number; title: string } | null>(null)
   const [showGraph, setShowGraph] = useState(false)
   const [topicLoading, setTopicLoading] = useState<number | null>(null)
+
+  // AI 学习搭子聊天
+  const [chatInput, setChatInput] = useState('')
+  const [chatHistory, setChatHistory] = useState<{ role: string; content: string }[]>([])
+  const [chatLoading, setChatLoading] = useState(false)
+  const chatEndRef = useRef<HTMLDivElement>(null)
 
   // 新创建目标时自动生成路线和规划
   const [autoGenStage, setAutoGenStage] = useState<'idle' | 'roadmap' | 'plan' | 'done' | 'error'>('idle')
@@ -208,22 +224,27 @@ export default function GoalDetail() {
     setTopicLoading(topicDay)
     setModalError('')
 
-    // 检查缓存
+    // 检查缓存 — 若有进行中的预加载则等待它，避免重复请求
+    let materials: any
     const cached = useCache ? getCachedTopic(+id!, topicDay) : null
+    const pending = useCache ? getPendingPreCache(+id!, topicDay) : null
+
     if (cached) {
       clearCachedTopic(+id!, topicDay)
-      const m = cached.materials
-      setModalLoading(false)
-      setSelectedTask({
-        title: cached.title || topicTitle,
-        duration_min: cached.duration_min || 30,
-        detail: cached.detail || '',
-        materials: m && typeof m === 'object' && (
-          m.summary || m.content || m.example || m.practice ||
-          (m.key_concepts?.length > 0) || (m.learning_objectives?.length > 0) ||
-          (m.examples?.length > 0) || (m.practice_questions?.length > 0)
-        ) ? m : undefined,
-      })
+      materials = cached
+    } else if (pending) {
+      setModalLoading(true)
+      setSelectedTask({ title: topicTitle, duration_min: 30, detail: 'AI 正在生成学习材料...' })
+      try {
+        materials = await pending
+        if (!materials) throw new Error('preCache failed')
+      } catch {
+        try { materials = await learnTopic(+id!, topicDay) } catch { materials = null }
+      }
+    }
+
+    if (materials) {
+      // 将当前及之前所有天数标记为已学习
       setLearnedDays(prev => {
         const next = new Set(prev)
         for (let d = 1; d <= topicDay; d++) next.add(d)
@@ -231,7 +252,27 @@ export default function GoalDetail() {
         return next
       })
       markTopicsUpTo(+id!, topicDay).catch(() => {})
-      // 预缓存下一个未学知识点（基于即将更新的状态）
+      setModalLoading(false)
+      setModalError('')
+      const m = materials.materials
+      if (!m || typeof m !== 'object' || !(
+        m.summary || m.content || m.example || m.practice ||
+        (m.key_concepts?.length > 0) ||
+        (m.learning_objectives?.length > 0) ||
+        (m.examples?.length > 0) ||
+        (m.practice_questions?.length > 0)
+      )) {
+        setModalError('AI 返回的学习材料为空，请重试')
+        setTopicLoading(null)
+        return
+      }
+      setSelectedTask({
+        title: materials.title || topicTitle,
+        duration_min: materials.duration_min || 30,
+        detail: materials.detail || '',
+        materials: m,
+      })
+      // 预缓存下一个未学知识点
       { const newLearned = new Set(learnedDays); for (let d = 1; d <= topicDay; d++) newLearned.add(d)
         const nextTopic = flatTopics.find((t: any) => !newLearned.has(t.day))
         if (nextTopic) preCacheTopic(+id!, nextTopic.day) }
@@ -246,7 +287,7 @@ export default function GoalDetail() {
       detail: 'AI 正在生成学习材料...',
     })
     try {
-      const materials = await learnTopic(+id!, topicDay)
+      materials = await learnTopic(+id!, topicDay)
       // 将当前及之前所有天数标记为已学习
       setLearnedDays(prev => {
         const next = new Set(prev)
@@ -295,8 +336,10 @@ export default function GoalDetail() {
   })
 
   const handleGenerateQuestions = () => doAction('生成问题', async () => {
-    await generateQuestions(+id!)
-    await loadGoal()
+    const newQuestions = await generateQuestions(+id!)
+    setEvaluations({})
+    setAnswers({})
+    setGoal(prev => prev ? { ...prev, today_questions: newQuestions } : prev)
   })
 
   const handleSubmitAnswer = async (questionId: number) => {
@@ -307,11 +350,42 @@ export default function GoalDetail() {
       const result = await submitAnswer(questionId, ans)
       setEvaluations(prev => ({ ...prev, [questionId]: result.ai_evaluation || result }))
       setAnswers(prev => { const n = { ...prev }; delete n[questionId]; return n })
-      await loadGoal()
+      // 本地更新问题状态，避免 reload 整个页面造成抖动
+      setGoal(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          today_questions: prev.today_questions?.map(q =>
+            q.id === questionId ? { ...q, status: 'answered' } : q
+          ) || []
+        }
+      })
     } catch (e) {
       console.error('提交失败', e)
     } finally {
       setSubmittingQ(null)
+    }
+  }
+
+  const handleChatSend = async () => {
+    const msg = chatInput.trim()
+    if (!msg || chatLoading) return
+    setChatInput('')
+    const updated = [...chatHistory, { role: 'user', content: msg }]
+    setChatHistory(updated)
+    setChatLoading(true)
+    try {
+      const context = goal ? `${goal.title}\n当前学习进度：${learnedDays.size} / ${flatTopics.length} 节` : ''
+      const result = await chatWithBuddy(+id!, {
+        message: msg,
+        context,
+        chat_history: chatHistory,
+      })
+      setChatHistory([...updated, { role: 'assistant', content: result.reply }])
+    } catch {
+      setChatHistory([...updated, { role: 'assistant', content: '抱歉，AI 暂时无法响应，请稍后再试。' }])
+    } finally {
+      setChatLoading(false)
     }
   }
 
@@ -774,7 +848,7 @@ export default function GoalDetail() {
         )
       })()}
 
-      {/* 今日问题 */}
+      {/* 今日问题 + AI 搭子 */}
       {isToday && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
           <div className="flex items-center justify-between mb-4">
@@ -788,63 +862,140 @@ export default function GoalDetail() {
               生成问题
             </button>
           </div>
-          {questions.length === 0 ? (
-            <div className="text-center py-8">
-              <MessageCircle size={36} className="mx-auto mb-2 text-gray-200" />
-              <p className="text-gray-400 text-sm">暂无问题，点击生成获取今日练习</p>
+          <div className="flex gap-5 flex-col lg:flex-row">
+            {/* 左侧：问题列表 */}
+            <div className="flex-1 min-w-0">
+              {questions.length === 0 ? (
+                <div className="text-center py-8">
+                  <MessageCircle size={36} className="mx-auto mb-2 text-gray-200" />
+                  <p className="text-gray-400 text-sm">暂无问题，点击生成获取今日练习</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {questions
+                    .filter((q: any) => q.status !== 'answered' || evaluations[q.id])
+                    .map((q: any) => {
+                      const eval_ = evaluations[q.id]
+                      return (
+                        <div key={q.id} className={`p-4 rounded-xl border transition-all ${
+                          eval_ ? 'border-emerald-200 bg-emerald-50/50' : 'border-indigo-100 bg-indigo-50/50'
+                        }`}>
+                          <p className="text-sm font-medium text-gray-900 mb-3 flex items-start gap-2">
+                            <MessageCircle size={14} className="text-indigo-400 mt-0.5 shrink-0" />
+                            {q.question}
+                            <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                              q.difficulty === 'easy' ? 'bg-emerald-100 text-emerald-600' :
+                              q.difficulty === 'hard' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
+                            }`}>{q.difficulty}</span>
+                          </p>
+                          {eval_ ? (
+                            <div className="space-y-2">
+                              <div className="p-3 bg-white rounded-lg border border-emerald-100">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                    (eval_.score ?? 0) >= 8 ? 'bg-emerald-100 text-emerald-700' :
+                                    (eval_.score ?? 0) >= 5 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                                  }`}>评分: {eval_.score}/10</span>
+                                </div>
+                                {eval_.correctness && (
+                                  <p className="text-xs text-gray-600 mb-1.5">{eval_.correctness}</p>
+                                )}
+                                {eval_.depth && (
+                                  <p className="text-xs text-gray-500 mb-1.5">理解深度: {eval_.depth}</p>
+                                )}
+                                {eval_.suggestion && (
+                                  <p className="text-xs text-indigo-600 bg-indigo-50 p-2.5 rounded-lg leading-relaxed">{eval_.suggestion}</p>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <textarea
+                                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none resize-none transition-all"
+                                rows={3}
+                                placeholder="写下你的回答..."
+                                value={answers[q.id] || ''}
+                                onChange={e => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                              />
+                              <button
+                                onClick={() => handleSubmitAnswer(q.id)}
+                                disabled={submittingQ === q.id || !(answers[q.id] || '').trim()}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 cursor-pointer text-sm transition-all shadow-sm shadow-indigo-200"
+                              >
+                                {submittingQ === q.id ? (
+                                  <><Loader2 size={14} className="animate-spin" /> AI 评估中...</>
+                                ) : (
+                                  <><Send size={13} /> 提交评估</>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                </div>
+              )}
+              {/* 生成更多题目 */}
+              {questions.length > 0 && questions.every((q: any) => q.status === 'answered' || evaluations[q.id]) && (
+                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+                  <span className="text-xs text-gray-400">全部答完，可以继续刷题</span>
+                  <button onClick={handleGenerateQuestions} disabled={actionLoading === '生成问题'}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 cursor-pointer transition-all shadow-sm shadow-indigo-200">
+                    <Sparkles size={13} /> 生成更多题目
+                  </button>
+                </div>
+              )}
+              <div className="mt-4 pt-3 border-t border-gray-100">
+                <Link to={`/goals/${id}/history`} className="text-sm text-indigo-500 hover:text-indigo-700 flex items-center gap-1 transition-colors">
+                  <FileText size={13} /> 查看问答历史 →
+                </Link>
+              </div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {questions
-                .filter((q: any) => !evaluations[q.id] && q.status !== 'answered')
-                .map((q: any) => (
-                  <div key={q.id} className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/50 transition-all">
-                    <p className="text-sm font-medium text-gray-900 mb-3 flex items-start gap-2">
-                      <MessageCircle size={14} className="text-indigo-400 mt-0.5 shrink-0" />
-                      {q.question}
-                      <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                        q.difficulty === 'easy' ? 'bg-emerald-100 text-emerald-600' :
-                        q.difficulty === 'hard' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
-                      }`}>{q.difficulty}</span>
-                    </p>
-                    <div className="space-y-2">
-                      <textarea
-                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none resize-none transition-all"
-                        rows={3}
-                        placeholder="写下你的回答..."
-                        value={answers[q.id] || ''}
-                        onChange={e => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
-                      />
-                      <button
-                        onClick={() => handleSubmitAnswer(q.id)}
-                        disabled={submittingQ === q.id || !(answers[q.id] || '').trim()}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 cursor-pointer text-sm transition-all shadow-sm shadow-indigo-200"
-                      >
-                        {submittingQ === q.id ? (
-                          <><Loader2 size={14} className="animate-spin" /> AI 评估中...</>
-                        ) : (
-                          <><Send size={13} /> 提交评估</>
-                        )}
-                      </button>
+
+            {/* 右侧：AI 学习搭子 */}
+            <div className="lg:w-80 shrink-0 lg:border-l lg:border-gray-100 lg:pl-5">
+              <h3 className="text-xs font-medium text-gray-500 mb-3 flex items-center gap-1.5">
+                <Sparkles size={12} className="text-amber-400" /> AI 学习搭子
+              </h3>
+              {chatHistory.length > 0 && (
+                <div className="space-y-2 mb-3 max-h-80 overflow-y-auto">
+                  {chatHistory.map((m, i) => (
+                    <div key={i} className={`text-sm p-2.5 rounded-xl ${
+                      m.role === 'user'
+                        ? 'bg-indigo-50 text-gray-700 ml-4'
+                        : 'bg-amber-50 text-gray-700 mr-4'
+                    }`}>
+                      <p className="text-[10px] text-gray-400 mb-0.5">{m.role === 'user' ? '你' : 'AI 搭子'}</p>
+                      <p className="leading-relaxed whitespace-pre-wrap">{m.content}</p>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                  {chatLoading && (
+                    <div className="bg-amber-50 text-gray-700 mr-4 text-sm p-2.5 rounded-xl">
+                      <p className="text-[10px] text-gray-400 mb-0.5">AI 搭子</p>
+                      <Loader2 size={14} className="animate-spin text-amber-400" />
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+              )}
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none transition-all"
+                  placeholder="提问，按回车发送..."
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleChatSend() }}
+                />
+                <button
+                  onClick={handleChatSend}
+                  disabled={!chatInput.trim() || chatLoading}
+                  className="px-3 py-2 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-xl hover:from-amber-500 hover:to-orange-600 disabled:opacity-50 cursor-pointer transition-all shadow-sm shadow-amber-200 flex items-center gap-1"
+                >
+                  <Send size={13} />
+                </button>
+              </div>
             </div>
-          )}
-          {/* 生成更多题目 */}
-          {questions.length > 0 && questions.every((q: any) => q.status === 'answered' || evaluations[q.id]) && (
-            <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-              <span className="text-xs text-gray-400">全部答完，可以继续刷题</span>
-              <button onClick={handleGenerateQuestions} disabled={actionLoading === '生成问题'}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 cursor-pointer transition-all shadow-sm shadow-indigo-200">
-                <Sparkles size={13} /> 生成更多题目
-              </button>
-            </div>
-          )}
-          <div className="mt-4 pt-3 border-t border-gray-100">
-            <Link to={`/goals/${id}/history`} className="text-sm text-indigo-500 hover:text-indigo-700 flex items-center gap-1 transition-colors">
-              <FileText size={13} /> 查看问答历史 →
-            </Link>
           </div>
         </div>
       )}

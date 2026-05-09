@@ -120,10 +120,17 @@ def gen_questions(goal_id: int, db: Session = Depends(get_db)):
     avg_score = sum(a.score for a in recent_answers if a.score) / max(len([a for a in recent_answers if a.score]), 1)
     difficulty = 'medium' if avg_score >= 6 else 'easy' if avg_score < 4 else 'medium'
 
+    # 获取历史问题，避免重复出题
+    previous_qs = db.query(DailyQuestion.question).filter(
+        DailyQuestion.goal_id == goal_id
+    ).order_by(DailyQuestion.date.desc()).limit(20).all()
+    previous_questions = [row[0] for row in previous_qs]
+
     try:
         result = chat_json([{'role': 'user', 'content': generate_questions(
             goal_title=g.title, current_topic=current_topic, difficulty=difficulty,
             learned_topics=learned_titles,
+            previous_questions=previous_questions,
         )}])
     except Exception:
         raise HTTPException(status_code=500, detail='AI 生成问题失败')

@@ -54,10 +54,21 @@ def _get_today_questions(db: Session, goal_id: int) -> list[dict]:
     qs = db.query(DailyQuestion).filter(
         DailyQuestion.goal_id == goal_id, DailyQuestion.date == today
     ).all()
-    return [{'id': q.id, 'goal_id': q.goal_id, 'date': str(q.date),
-             'question': q.question, 'expected_answer': q.expected_answer,
-             'difficulty': q.difficulty, 'status': q.status, 'created_at': q.created_at.isoformat()}
-            for q in qs]
+    result = []
+    for q in qs:
+        item = {'id': q.id, 'goal_id': q.goal_id, 'date': str(q.date),
+                'question': q.question, 'expected_answer': q.expected_answer,
+                'difficulty': q.difficulty, 'status': q.status, 'created_at': q.created_at.isoformat()}
+        if q.status == 'answered':
+            ans = db.query(UserAnswer).filter(
+                UserAnswer.question_id == q.id
+            ).order_by(UserAnswer.created_at.desc()).first()
+            if ans and ans.ai_evaluation:
+                item['evaluation'] = json.loads(ans.ai_evaluation) if isinstance(ans.ai_evaluation, str) else ans.ai_evaluation
+            else:
+                item['evaluation'] = None
+        result.append(item)
+    return result
 
 
 def _get_today_journal(db: Session, goal_id: int) -> dict | None:

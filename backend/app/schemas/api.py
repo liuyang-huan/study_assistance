@@ -98,6 +98,7 @@ class QuestionResponse(BaseModel):
     difficulty: str
     status: str
     created_at: datetime
+    evaluation: dict | None = None
 
 
 # --- 学习进度 ---
