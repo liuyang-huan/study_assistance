@@ -99,6 +99,7 @@ class QuestionResponse(BaseModel):
     status: str
     created_at: datetime
     evaluation: dict | None = None
+    type: str | None = None  # 'new' | 'review'
 
 
 # --- 学习进度 ---

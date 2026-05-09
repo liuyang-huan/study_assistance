@@ -893,6 +893,12 @@ export default function GoalDetail() {
                           <p className="text-sm font-medium text-gray-900 dark:text-slate-100 mb-3 flex items-start gap-2">
                             <MessageCircle size={14} className="text-indigo-400 mt-0.5 shrink-0" />
                             {q.question}
+                            {q.type === 'review' && (
+                              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-orange-100 text-orange-600">回顾</span>
+                            )}
+                            {q.type === 'new' && (
+                              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-blue-100 text-blue-600">新学</span>
+                            )}
                             <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                               q.difficulty === 'easy' ? 'bg-emerald-100 text-emerald-600' :
                               q.difficulty === 'hard' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'

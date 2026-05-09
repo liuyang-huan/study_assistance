@@ -97,28 +97,57 @@ def gen_questions(goal_id: int, db: Session = Depends(get_db)):
 
     roadmap_data = json.loads(rm.content) if isinstance(rm.content, str) else rm.content
     phases = roadmap_data.get('phases', [])
-    current_topic = '开始阶段'
 
     # 从路线中提取所有主题（day → title）
     all_topics: dict[int, str] = {}
     for p in phases:
         for t in p.get('topics', []):
             all_topics[t.get('day', 0)] = t.get('title', '')
-            # 取首个主题作为当前主题
-            if current_topic == '开始阶段':
-                current_topic = p['title'] + ' - ' + t.get('title', '')
 
-    # 获取已学习主题
+    # 获取已学天数
     learned_rows = db.query(LearnedTopic).filter(LearnedTopic.goal_id == goal_id).all()
-    learned_days = [r.topic_day for r in learned_rows]
-    learned_titles = [all_topics.get(d, f'Day {d}') for d in sorted(learned_days)]
+    learned_days = sorted([r.topic_day for r in learned_rows])
 
-    # 获取最近评分来调整难度
+    # 定位 current_topic：第一个未学的 topic
+    current_topic = '开始阶段'
+    current_day = None
+    for p in phases:
+        for t in p.get('topics', []):
+            day = t.get('day', 0)
+            if day not in learned_days:
+                current_topic = f'{p["title"]} - {t.get("title", "")}'
+                current_day = day
+                break
+        if current_day is not None:
+            break
+
+    # 已学主题标题
+    learned_titles = [all_topics.get(d, f'Day {d}') for d in learned_days]
+
+    # 回顾主题：最近学过的 3 个 topic + 答题低分相关
+    review_targets = []
+    # 最近学过的 topic（最新 3 个）
+    recent_learned = learned_days[-3:] if len(learned_days) >= 3 else learned_days
+    review_targets = [all_topics.get(d, f'Day {d}') for d in recent_learned]
+
+    # 如果近期答题平均分低，额外把更早的 topic 也加入回顾
     recent_answers = db.query(UserAnswer).join(DailyQuestion).filter(
         DailyQuestion.goal_id == goal_id
-    ).order_by(UserAnswer.created_at.desc()).limit(3).all()
-    avg_score = sum(a.score for a in recent_answers if a.score) / max(len([a for a in recent_answers if a.score]), 1)
+    ).order_by(UserAnswer.created_at.desc()).limit(5).all()
+    scores = [a.score for a in recent_answers if a.score is not None]
+    avg_score = sum(scores) / len(scores) if scores else 0
     difficulty = 'medium' if avg_score >= 6 else 'easy' if avg_score < 4 else 'medium'
+
+    # 如果平均分低且还有更早的已学 topic，也加入回顾
+    if avg_score < 6 and len(learned_days) > len(recent_learned):
+        earlier = learned_days[:-(len(recent_learned))] if len(recent_learned) > 0 else learned_days
+        for d in earlier[-2:]:  # 再加最多 2 个更早的
+            title = all_topics.get(d, f'Day {d}')
+            if title not in review_targets:
+                review_targets.append(title)
+
+    # 去重并限制数量
+    review_topics = list(dict.fromkeys(review_targets))[:4]
 
     # 获取历史问题，避免重复出题
     previous_qs = db.query(DailyQuestion.question).filter(
@@ -129,7 +158,8 @@ def gen_questions(goal_id: int, db: Session = Depends(get_db)):
     try:
         result = chat_json([{'role': 'user', 'content': generate_questions(
             goal_title=g.title, current_topic=current_topic, difficulty=difficulty,
-            learned_topics=learned_titles,
+            learned_topics=learned_titles[-5:],  # 只传最近 5 个已学
+            review_topics=review_topics,
             previous_questions=previous_questions,
         )}])
     except Exception:
@@ -146,7 +176,9 @@ def gen_questions(goal_id: int, db: Session = Depends(get_db)):
         )
         db.add(q)
         db.flush()
-        questions.append(_question_to_response(q))
+        resp = _question_to_response(q)
+        resp['type'] = q_data.get('type', 'new')  # 问题类型：new / review
+        questions.append(resp)
     db.commit()
     return questions
 

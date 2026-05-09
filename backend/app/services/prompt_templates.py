@@ -58,20 +58,29 @@ def generate_daily_plan(goal_title: str, roadmap_summary: str, current_phase: st
 
 def generate_questions(goal_title: str, current_topic: str, difficulty: str = 'medium',
                        learned_topics: list[str] | None = None,
+                       review_topics: list[str] | None = None,
                        previous_questions: list[str] | None = None) -> str:
     learned_text = ''
     if learned_topics:
-        learned_text = '\n用户已学过的知识点（出题时请适当关联这些内容）：\n' + '\n'.join(f'  - {t}' for t in learned_topics)
+        learned_text = '\n用户已学过的知识点：\n' + '\n'.join(f'  - {t}' for t in learned_topics)
+    review_text = ''
+    if review_topics:
+        review_text = '\n【必须回顾】请务必包含 1-2 道回顾以下旧知识点的题目：\n' + '\n'.join(f'  - {t}' for t in review_topics)
     avoid_text = ''
     if previous_questions:
         avoid_text = '\n【重要】以下问题用户已经回答过，请勿重复出题：\n' + '\n'.join(f'  - {q}' for q in previous_questions)
     return f"""用户正在学习：{goal_title}。
 当前学习主题：{current_topic}。
-难度要求：{difficulty}{learned_text}{avoid_text}
+难度要求：{difficulty}{learned_text}{review_text}{avoid_text}
 
-请生成 2-3 个问题来检测用户对当前主题的理解程度。问题应有层次——从基础概念到深入理解。如果用户有已学过的知识点，可以穿插关联旧知识的问题，帮助用户建立知识体系。
+请生成 3-4 个问题，分为两类：
+- 1-2 道「新学」题：检测对当前主题的理解，从基础到深入
+- 1-2 道「回顾」题：检测对回顾列表中旧知识点的掌握程度
+
+每个问题需标记 type 字段（"new" 或 "review"）。
+
 返回 JSON：
-{{"questions": [{{"question": "问题内容", "expected_answer": "参考答案要点", "difficulty": "easy/medium/hard"}}]}}"""
+{{"questions": [{{"question": "问题内容", "expected_answer": "参考答案要点", "difficulty": "easy/medium/hard", "type": "new"}}]}}"""
 
 
 def evaluate_answer(goal_title: str, question: str, expected_answer: str, user_answer: str) -> str:
