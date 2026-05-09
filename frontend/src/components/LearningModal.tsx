@@ -813,7 +813,7 @@ export default function LearningModal({
             </div>
           </div>
         </aside>
-      )}
+
       {/* 选中文字浮动快捷操作栏 */}
       {selectedText && selectionRef.current && (
         <motion.div
