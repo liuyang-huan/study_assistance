@@ -8,6 +8,7 @@ from ..models.goal import LearningGoal
 from ..models.roadmap import Roadmap
 from ..models.question import DailyQuestion, UserAnswer
 from ..models.journal import JournalEntry
+from ..models.learned import LearnedTopic
 from ..schemas.api import AnswerSubmit, QuestionResponse, AnswerResponse
 from ..services.ai_service import chat_json
 from ..services.prompt_templates import generate_questions, evaluate_answer, adjust_roadmap
@@ -97,11 +98,20 @@ def gen_questions(goal_id: int, db: Session = Depends(get_db)):
     roadmap_data = json.loads(rm.content) if isinstance(rm.content, str) else rm.content
     phases = roadmap_data.get('phases', [])
     current_topic = '开始阶段'
-    if phases:
-        for p in phases:
-            if p.get('topics'):
-                current_topic = p['title'] + ' - ' + p['topics'][0].get('title', '')
-                break
+
+    # 从路线中提取所有主题（day → title）
+    all_topics: dict[int, str] = {}
+    for p in phases:
+        for t in p.get('topics', []):
+            all_topics[t.get('day', 0)] = t.get('title', '')
+            # 取首个主题作为当前主题
+            if current_topic == '开始阶段':
+                current_topic = p['title'] + ' - ' + t.get('title', '')
+
+    # 获取已学习主题
+    learned_rows = db.query(LearnedTopic).filter(LearnedTopic.goal_id == goal_id).all()
+    learned_days = [r.topic_day for r in learned_rows]
+    learned_titles = [all_topics.get(d, f'Day {d}') for d in sorted(learned_days)]
 
     # 获取最近评分来调整难度
     recent_answers = db.query(UserAnswer).join(DailyQuestion).filter(
@@ -112,7 +122,8 @@ def gen_questions(goal_id: int, db: Session = Depends(get_db)):
 
     try:
         result = chat_json([{'role': 'user', 'content': generate_questions(
-            goal_title=g.title, current_topic=current_topic, difficulty=difficulty
+            goal_title=g.title, current_topic=current_topic, difficulty=difficulty,
+            learned_topics=learned_titles,
         )}])
     except Exception:
         raise HTTPException(status_code=500, detail='AI 生成问题失败')

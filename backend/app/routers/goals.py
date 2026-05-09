@@ -9,6 +9,7 @@ from ..models.roadmap import Roadmap
 from ..models.plan import DailyPlan
 from ..models.question import DailyQuestion
 from ..models.journal import JournalEntry
+from ..models.learned import LearnedTopic
 from ..schemas.api import GoalCreate, GoalUpdate, GoalResponse, GoalDetailResponse
 
 router = APIRouter(prefix='/api/goals', tags=['goals'])
@@ -127,3 +128,49 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)):
     db.delete(g)
     db.commit()
     return {'ok': True}
+
+
+# --- 已学习主题 ---
+@router.get('/{goal_id}/learned')
+def get_learned_topics(goal_id: int, db: Session = Depends(get_db)):
+    rows = db.query(LearnedTopic).filter(LearnedTopic.goal_id == goal_id).all()
+    return {'learned_days': [r.topic_day for r in rows]}
+
+
+@router.post('/{goal_id}/learned/{topic_day}')
+def mark_topic_learned(goal_id: int, topic_day: int, db: Session = Depends(get_db)):
+    g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
+    if not g:
+        raise HTTPException(status_code=404, detail='目标不存在')
+    existing = db.query(LearnedTopic).filter(
+        LearnedTopic.goal_id == goal_id, LearnedTopic.topic_day == topic_day
+    ).first()
+    if not existing:
+        db.add(LearnedTopic(goal_id=goal_id, topic_day=topic_day))
+        db.commit()
+    return {'ok': True}
+
+
+@router.delete('/{goal_id}/learned/{topic_day}')
+def unmark_topic_learned(goal_id: int, topic_day: int, db: Session = Depends(get_db)):
+    db.query(LearnedTopic).filter(
+        LearnedTopic.goal_id == goal_id, LearnedTopic.topic_day == topic_day
+    ).delete()
+    db.commit()
+    return {'ok': True}
+
+
+@router.post('/{goal_id}/learned/up-to/{topic_day}')
+def mark_topics_up_to(goal_id: int, topic_day: int, db: Session = Depends(get_db)):
+    """将 day 1..topic_day 全部标记为已学习"""
+    g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
+    if not g:
+        raise HTTPException(status_code=404, detail='目标不存在')
+    existing = {r.topic_day for r in db.query(LearnedTopic).filter(
+        LearnedTopic.goal_id == goal_id, LearnedTopic.topic_day <= topic_day
+    ).all()}
+    for d in range(1, topic_day + 1):
+        if d not in existing:
+            db.add(LearnedTopic(goal_id=goal_id, topic_day=d))
+    db.commit()
+    return {'learned_days': list(range(1, topic_day + 1))}

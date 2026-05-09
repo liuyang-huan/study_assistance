@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import {
   getGoal, generateRoadmap, generatePlan, completePlan,
   generateQuestions, submitAnswer, saveJournal, getPlans, getQuestions,
-  exportRoadmap, exportPlan, exportJournal, downloadBlob, learnTopic,
+  exportRoadmap, exportPlan, exportJournal, downloadBlob, learnTopic, getLearnedTopics, markTopicLearned, markTopicsUpTo,
 } from '../services/api'
 import StatsPanel from '../components/StatsPanel'
 import LearningModal from '../components/LearningModal'
@@ -58,20 +58,38 @@ export default function GoalDetail() {
   const [autoGenError, setAutoGenError] = useState('')
   const autoGenTried = useRef(false)
 
-  // 已学习的主题天数（localStorage 持久化，突破每日规划限制）
+  // 已学习的主题天数（localStorage 兜底 + 后端持久化）
   const learnedKey = `learned-days-${id}`
-  const [learnedDays, setLearnedDays] = useState<Set<number>>(() => {
-    try {
-      const raw = localStorage.getItem(`learned-days-${id}`)
-      return raw ? new Set(JSON.parse(raw)) : new Set<number>()
-    } catch { return new Set<number>() }
-  })
+  const [learnedDays, setLearnedDays] = useState<Set<number>>(new Set())
+  const [learnedLoaded, setLearnedLoaded] = useState(false)
+
+  useEffect(() => {
+    if (!id) return
+    getLearnedTopics(+id).then(days => {
+      if (days.length > 0) {
+        setLearnedDays(new Set(days))
+      } else {
+        // 后端无数据，从 localStorage 恢复
+        try {
+          const raw = localStorage.getItem(learnedKey)
+          if (raw) setLearnedDays(new Set(JSON.parse(raw)))
+        } catch {}
+      }
+    }).catch(() => {
+      // 网络异常时从 localStorage 回退
+      try {
+        const raw = localStorage.getItem(learnedKey)
+        if (raw) setLearnedDays(new Set(JSON.parse(raw)))
+      } catch {}
+    }).finally(() => setLearnedLoaded(true))
+  }, [id])
 
   const markLearned = (day: number) => {
     setLearnedDays(prev => {
       const next = new Set(prev)
       next.add(day)
       localStorage.setItem(learnedKey, JSON.stringify([...next]))
+      markTopicLearned(+id!, day).catch(() => {})
       return next
     })
   }
@@ -171,7 +189,14 @@ export default function GoalDetail() {
     })
     try {
       const materials = await learnTopic(+id!, topicDay)
-      markLearned(topicDay)
+      // 将当前及之前所有天数标记为已学习
+      setLearnedDays(prev => {
+        const next = new Set(prev)
+        for (let d = 1; d <= topicDay; d++) next.add(d)
+        localStorage.setItem(learnedKey, JSON.stringify([...next]))
+        return next
+      })
+      markTopicsUpTo(+id!, topicDay).catch(() => {})
       setModalLoading(false)
       setModalError('')
       // 验证 AI 返回的材料是否有效（非空对象）

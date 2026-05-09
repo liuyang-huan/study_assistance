@@ -56,12 +56,16 @@ def generate_daily_plan(goal_title: str, roadmap_summary: str, current_phase: st
 }}], "note": "当日学习提示"}}"""
 
 
-def generate_questions(goal_title: str, current_topic: str, difficulty: str = 'medium') -> str:
+def generate_questions(goal_title: str, current_topic: str, difficulty: str = 'medium',
+                       learned_topics: list[str] | None = None) -> str:
+    learned_text = ''
+    if learned_topics:
+        learned_text = '\n用户已学过的知识点（出题时请适当关联这些内容）：\n' + '\n'.join(f'  - {t}' for t in learned_topics)
     return f"""用户正在学习：{goal_title}。
 当前学习主题：{current_topic}。
-难度要求：{difficulty}
+难度要求：{difficulty}{learned_text}
 
-请生成 2-3 个问题来检测用户对当前主题的理解程度。问题应有层次——从基础概念到深入理解。
+请生成 2-3 个问题来检测用户对当前主题的理解程度。问题应有层次——从基础概念到深入理解。如果用户有已学过的知识点，可以穿插关联旧知识的问题，帮助用户建立知识体系。
 返回 JSON：
 {{"questions": [{{"question": "问题内容", "expected_answer": "参考答案要点", "difficulty": "easy/medium/hard"}}]}}"""
 

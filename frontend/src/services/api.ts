@@ -82,3 +82,11 @@ export const getStats = (goalId: number) =>
   http.get<LearningStats>(`/goals/${goalId}/stats`).then(r => r.data)
 export const getHeatmap = (goalId: number) =>
   http.get(`/goals/${goalId}/heatmap`).then(r => r.data)
+
+// 已学习主题
+export const getLearnedTopics = (goalId: number) =>
+  http.get<{ learned_days: number[] }>(`/goals/${goalId}/learned`).then(r => r.data.learned_days)
+export const markTopicLearned = (goalId: number, topicDay: number) =>
+  http.post(`/goals/${goalId}/learned/${topicDay}`)
+export const markTopicsUpTo = (goalId: number, topicDay: number) =>
+  http.post<{ learned_days: number[] }>(`/goals/${goalId}/learned/up-to/${topicDay}`)
