@@ -367,7 +367,7 @@ export default function GoalDetail() {
     setChatHistory([...updated, { role: 'assistant', content: '' }])
     try {
       const context = goal ? `${goal.title}\n当前学习进度：${learnedDays.size} / ${flatTopics.length} 节` : ''
-      const resp = await fetch(`http://localhost:8000/api/goals/${id}/chat/stream`, {
+      const resp = await fetch(`/api/goals/${id}/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg, context, chat_history: chatHistory }),

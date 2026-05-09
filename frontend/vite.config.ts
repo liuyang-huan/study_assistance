@@ -9,6 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      devOptions: { enabled: true },
       manifest: {
         name: '学习助手 - AI 驱动学习',
         short_name: '学习助手',
@@ -22,7 +23,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: /^http:\/\/localhost:8000\/api\/.*/i,
+            urlPattern: /\/api\/.*/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
@@ -43,6 +44,7 @@ export default defineConfig({
     }),
   ],
   server: {
+    allowedHosts: ['.trycloudflare.com'],
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

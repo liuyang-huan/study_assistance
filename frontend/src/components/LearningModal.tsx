@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   BookOpen, Clock, Lightbulb, Code, PenLine, X, Target,
   Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Save, Loader2, AlertCircle,
-  MessageCircle, Send, Bot, User, Sparkles
+  MessageCircle, Send, Bot, User, Sparkles, Menu
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -180,6 +180,7 @@ export default function LearningModal({
   const [notesSaved, setNotesSaved] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
   const [showRightPanel, setShowRightPanel] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // 选中文字快速提问
   const [selectedText, setSelectedText] = useState('')
@@ -332,8 +333,17 @@ export default function LearningModal({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 bg-gray-100 dark:bg-slate-800 flex"
     >
+      {/* 移动端侧边栏遮罩 */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* 左侧大纲导航 */}
-      <aside className="w-64 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex flex-col shrink-0">
+      <aside className={`bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex flex-col shrink-0 transition-all duration-200
+        fixed lg:static inset-y-0 left-0 z-50 w-72
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        lg:w-64
+      `}>
         <div className="p-4 border-b border-gray-100">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-2 shadow-md shadow-indigo-200">
             <BookOpen size={17} className="text-white" />
@@ -360,6 +370,7 @@ export default function LearningModal({
                 key={id}
                 onClick={() => {
                   document.getElementById(`sec-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  setSidebarOpen(false)
                   askAboutSection(id)
                 }}
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer ${
@@ -382,8 +393,12 @@ export default function LearningModal({
         {/* 顶部栏 — 含紧凑计时器 */}
         <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 px-6 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
+            <button onClick={() => setSidebarOpen(true)}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer transition-colors shrink-0 lg:hidden">
+              <Menu size={18} className="text-gray-400 dark:text-slate-500" />
+            </button>
             <button onClick={onClose}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:bg-slate-800 cursor-pointer transition-colors shrink-0">
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer transition-colors shrink-0">
               <X size={18} className="text-gray-400 dark:text-slate-500" />
             </button>
             <div className="min-w-0">
