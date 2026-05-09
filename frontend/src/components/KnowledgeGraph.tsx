@@ -211,10 +211,10 @@ export default function KnowledgeGraph({ goalId, onClose }: { goalId: number; on
   // --- 加载态 ---
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
+      <div className="fixed inset-0 z-50 bg-white dark:bg-slate-900 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin w-10 h-10 border-2 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4" />
-          <p className="text-gray-500 text-sm">加载知识图谱...</p>
+          <p className="text-gray-500 dark:text-slate-400 text-sm">加载知识图谱...</p>
         </div>
       </div>
     )
@@ -222,13 +222,13 @@ export default function KnowledgeGraph({ goalId, onClose }: { goalId: number; on
 
   if (!data || data.nodes.length === 0) {
     return (
-      <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
+      <div className="fixed inset-0 z-50 bg-white dark:bg-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <GitBranch size={48} className="mx-auto mb-4 text-gray-200" />
-          <p className="text-gray-500 font-medium">暂无知识图谱</p>
-          <p className="text-gray-400 text-sm mt-1">请先生成学习路线</p>
+          <GitBranch size={48} className="mx-auto mb-4 text-gray-200 dark:text-slate-700" />
+          <p className="text-gray-500 dark:text-slate-400 font-medium">暂无知识图谱</p>
+          <p className="text-gray-400 dark:text-slate-500 text-sm mt-1">请先生成学习路线</p>
           <button onClick={onClose}
-            className="mt-6 px-5 py-2 bg-gray-100 rounded-xl hover:bg-gray-200 cursor-pointer text-sm transition-colors">
+            className="mt-6 px-5 py-2 bg-gray-100 dark:bg-slate-800 rounded-xl hover:bg-gray-200 cursor-pointer text-sm transition-colors">
             返回
           </button>
         </div>
@@ -246,18 +246,18 @@ export default function KnowledgeGraph({ goalId, onClose }: { goalId: number; on
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-gray-50 flex flex-col select-none"
+      className="fixed inset-0 z-50 bg-gray-50 dark:bg-slate-800 flex flex-col select-none"
     >
-      <header className="bg-white border-b border-gray-200 px-5 py-3 flex items-center justify-between shrink-0 z-10">
+      <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 px-5 py-3 flex items-center justify-between shrink-0 z-10">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md shadow-indigo-200">
             <GitBranch size={17} className="text-white" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-gray-900">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-slate-100">
               {rootNode ? rootNode.label : '知识图谱'}
             </h2>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-400 dark:text-slate-500">
               {topicsDone}/{topicsTotal} 主题
               {conceptsTotal > 0 && ` · ${conceptsTotal} 个概念`}
               {` · ${data.nodes.filter(n => n.type === 'phase').length} 阶段`}
@@ -276,36 +276,36 @@ export default function KnowledgeGraph({ goalId, onClose }: { goalId: number; on
             </button>
           )}
           {generating && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-lg text-xs">
               <Loader2 size={13} className="animate-spin" />
               AI 正在提取概念...
             </div>
           )}
-          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-600 text-xs">
+          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 text-xs">
             <div className="w-2 h-2 rounded-full bg-emerald-400" /> 已完成
           </div>
-          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50 text-indigo-600 text-xs">
+          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 text-xs">
             <div className="w-2 h-2 rounded-full bg-indigo-400" /> 进行中
           </div>
-          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 text-gray-400 text-xs">
+          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500 text-xs">
             <div className="w-2 h-2 rounded-full bg-gray-300" /> 待学习
           </div>
           <div className="w-px h-5 bg-gray-200 mx-1" />
           <button onClick={() => setTransform(p => ({ ...p, scale: Math.min(2.5, p.scale * 1.2) }))}
-            className="p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer text-gray-400" title="放大">
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:bg-slate-800 cursor-pointer text-gray-400 dark:text-slate-500" title="放大">
             <ZoomIn size={16} />
           </button>
           <button onClick={() => setTransform(p => ({ ...p, scale: Math.max(0.3, p.scale * 0.8) }))}
-            className="p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer text-gray-400" title="缩小">
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:bg-slate-800 cursor-pointer text-gray-400 dark:text-slate-500" title="缩小">
             <ZoomOut size={16} />
           </button>
           <button onClick={resetView}
-            className="p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer text-gray-400" title="重置视角">
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:bg-slate-800 cursor-pointer text-gray-400 dark:text-slate-500" title="重置视角">
             <Maximize2 size={16} />
           </button>
           <button onClick={onClose}
-            className="ml-1 p-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-            <X size={16} className="text-gray-400" />
+            className="ml-1 p-2 rounded-lg hover:bg-gray-100 dark:bg-slate-800 cursor-pointer">
+            <X size={16} className="text-gray-400 dark:text-slate-500" />
           </button>
         </div>
       </header>
@@ -383,7 +383,6 @@ export default function KnowledgeGraph({ goalId, onClose }: { goalId: number; on
               const colors = statusColors(node.status)
               const isSelected = selectedNode?.id === node.id
               const isPhaseCollapsed = node.type === 'phase' && collapsedPhases.has(node.id)
-              const isTopicExpanded = node.type === 'topic' && expandedTopics.has(node.id)
               const shape = NODE_SHAPES[node.type]
 
               return (
@@ -473,7 +472,7 @@ export default function KnowledgeGraph({ goalId, onClose }: { goalId: number; on
 
       {/* 选中节点详情浮窗 */}
       {selectedNode && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-xl border border-gray-200 px-6 py-4 flex items-center gap-4 z-20">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-gray-200 dark:border-slate-700 px-6 py-4 flex items-center gap-4 z-20">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
             selectedNode.type === 'root' ? 'bg-gradient-to-br from-indigo-500 to-purple-600' :
             selectedNode.type === 'phase' ? 'bg-indigo-100' :
@@ -485,16 +484,16 @@ export default function KnowledgeGraph({ goalId, onClose }: { goalId: number; on
              <Circle size={16} className={statusColors(selectedNode.status).text} />}
           </div>
           <div>
-            <p className="text-sm font-semibold text-gray-900">{selectedNode.label}</p>
-            <p className="text-xs text-gray-400">
+            <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{selectedNode.label}</p>
+            <p className="text-xs text-gray-400 dark:text-slate-500">
               {selectedNode.subtitle}
               {selectedNode.score != null && ` · 均分 ${selectedNode.score}`}
             </p>
           </div>
           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-            selectedNode.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
-            selectedNode.status === 'in_progress' ? 'bg-indigo-50 text-indigo-600' :
-            'bg-gray-100 text-gray-400'
+            selectedNode.status === 'completed' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600' :
+            selectedNode.status === 'in_progress' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600' :
+            'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500'
           }`}>
             {selectedNode.status === 'completed' ? '已完成' : selectedNode.status === 'in_progress' ? '进行中' : '待学习'}
           </span>
@@ -504,7 +503,7 @@ export default function KnowledgeGraph({ goalId, onClose }: { goalId: number; on
               if (next.has(selectedNode.id)) next.delete(selectedNode.id)
               else next.add(selectedNode.id)
               return next
-            })} className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer transition-colors">
+            })} className="text-xs px-3 py-1.5 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 rounded-lg cursor-pointer transition-colors">
               {collapsedPhases.has(selectedNode.id) ? '展开主题' : '收起主题'}
             </button>
           )}

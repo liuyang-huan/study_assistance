@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   getGoal, generateRoadmap, generatePlan, completePlan,
-  generateQuestions, submitAnswer, saveJournal, getPlans, getQuestions,
-  exportRoadmap, exportPlan, exportJournal, downloadBlob, learnTopic, getLearnedTopics, markTopicLearned, markTopicsUpTo,
-  chatWithBuddy,
+  generateQuestions, submitAnswer, saveJournal, getPlans,
+  exportRoadmap, exportPlan, exportJournal, downloadBlob, learnTopic, getLearnedTopics, markTopicsUpTo,
 } from '../services/api'
 import StatsPanel from '../components/StatsPanel'
 import LearningModal from '../components/LearningModal'
@@ -12,7 +11,7 @@ import KnowledgeGraph from '../components/KnowledgeGraph'
 import type { GoalDetail as GoalDetailType } from '../types'
 import {
   ArrowLeft, Target, RefreshCw, Calendar, Sparkles, CheckCircle2,
-  BookOpen, MessageCircle, Clock, BarChart3, Send, Loader2, PenLine,
+  BookOpen, MessageCircle, Clock, Send, Loader2, PenLine,
   ChevronDown, ChevronUp, AlertCircle, Play, FileText, Brain, GitBranch,
   Download
 } from 'lucide-react'
@@ -125,16 +124,6 @@ export default function GoalDetail() {
       } catch {}
     }).finally(() => setLearnedLoaded(true))
   }, [id])
-
-  const markLearned = (day: number) => {
-    setLearnedDays(prev => {
-      const next = new Set(prev)
-      next.add(day)
-      localStorage.setItem(learnedKey, JSON.stringify([...next]))
-      markTopicLearned(+id!, day).catch(() => {})
-      return next
-    })
-  }
 
   const loadGoal = async () => {
     if (!id) return
@@ -374,14 +363,35 @@ export default function GoalDetail() {
     const updated = [...chatHistory, { role: 'user', content: msg }]
     setChatHistory(updated)
     setChatLoading(true)
+    // 流式请求 AI 搭子
+    setChatHistory([...updated, { role: 'assistant', content: '' }])
     try {
       const context = goal ? `${goal.title}\n当前学习进度：${learnedDays.size} / ${flatTopics.length} 节` : ''
-      const result = await chatWithBuddy(+id!, {
-        message: msg,
-        context,
-        chat_history: chatHistory,
+      const resp = await fetch(`http://localhost:8000/api/goals/${id}/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg, context, chat_history: chatHistory }),
       })
-      setChatHistory([...updated, { role: 'assistant', content: result.reply }])
+      const reader = resp.body?.getReader()
+      if (!reader) throw new Error('No stream')
+      const decoder = new TextDecoder()
+      let fullReply = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const text = decoder.decode(value, { stream: true })
+        for (const line of text.split('\n')) {
+          if (line.startsWith('data: ')) {
+            const payload = line.slice(6)
+            if (payload === '[DONE]') break
+            try {
+              const { token } = JSON.parse(payload)
+              fullReply += token
+              setChatHistory([...updated, { role: 'assistant', content: fullReply }])
+            } catch {}
+          }
+        }
+      }
     } catch {
       setChatHistory([...updated, { role: 'assistant', content: '抱歉，AI 暂时无法响应，请稍后再试。' }])
     } finally {
@@ -445,12 +455,12 @@ export default function GoalDetail() {
     <div className="pb-12 animate-fade-in">
       {/* 顶部导航 + 标题 */}
       <div className="mb-6">
-        <Link to="/" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 mb-3 transition-colors">
+        <Link to="/" className="inline-flex items-center gap-1 text-sm text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:text-slate-400 mb-3 transition-colors">
           <ArrowLeft size={14} /> 返回首页
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100 flex items-center gap-3">
               <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
                 <Target size={20} className="text-white" />
               </span>
@@ -458,13 +468,13 @@ export default function GoalDetail() {
             </h1>
             <div className="flex items-center gap-3 mt-2">
               <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                goal.status === 'active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' :
-                goal.status === 'completed' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
-                'bg-gray-100 text-gray-500 border border-gray-200'
+                goal.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 border border-emerald-200' :
+                goal.status === 'completed' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 border border-blue-200' :
+                'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 border border-gray-200'
               }`}>
                 {goal.status === 'active' ? '进行中' : goal.status === 'completed' ? '已完成' : '已暂停'}
               </span>
-              <span className="text-xs text-gray-400 flex items-center gap-1">
+              <span className="text-xs text-gray-400 dark:text-slate-500 flex items-center gap-1">
                 <RefreshCw size={11} />
                 路线 v{goal.roadmap?.version || '-'}
               </span>
@@ -472,11 +482,11 @@ export default function GoalDetail() {
           </div>
           <div className="flex gap-2">
             <button onClick={() => setShowGraph(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-sm border border-gray-200 rounded-xl hover:bg-gray-50 cursor-pointer bg-white transition-all">
+              className="flex items-center gap-1.5 px-3.5 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800 cursor-pointer bg-white transition-all">
               <GitBranch size={14} /> 知识图谱
             </button>
             <button onClick={handleGenerateRoadmap} disabled={!!actionLoading}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-sm border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-50 cursor-pointer bg-white transition-all">
+              className="flex items-center gap-1.5 px-3.5 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800 disabled:opacity-50 cursor-pointer bg-white transition-all">
               <RefreshCw size={14} className={actionLoading === '生成路线' ? 'animate-spin' : ''} />
               调整路线
             </button>
@@ -491,7 +501,7 @@ export default function GoalDetail() {
 
       {error && (
         <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
-          className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-sm border border-red-100 flex items-center gap-2">
+          className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 text-red-600 rounded-xl text-sm border border-red-100 flex items-center gap-2">
           <AlertCircle size={14} /> {error}
         </motion.div>
       )}
@@ -499,16 +509,16 @@ export default function GoalDetail() {
       <StatsPanel goalId={+id!} />
 
       {/* 学习路线 */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 dark:border-slate-800 shadow-sm p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+          <h2 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2">
             <BookOpen size={18} className="text-indigo-500" />
             学习路线
-            {goal.roadmap && <span className="text-xs text-gray-400 font-normal bg-gray-100 px-2 py-0.5 rounded-full">v{goal.roadmap.version}</span>}
+            {goal.roadmap && <span className="text-xs text-gray-400 dark:text-slate-500 font-normal bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">v{goal.roadmap.version}</span>}
           </h2>
           {phases.length > 0 && (
             <button onClick={() => exportRoadmap(+id!).then(b => downloadBlob(b, '学习路线.md'))}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer transition-all">
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 dark:text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:bg-indigo-900/30 rounded-lg cursor-pointer transition-all">
               <Download size={12} /> 导出
             </button>
           )}
@@ -519,9 +529,9 @@ export default function GoalDetail() {
               {autoGenStage === 'roadmap' && (
                 <div>
                   <Loader2 size={44} className="mx-auto mb-4 text-indigo-400 animate-spin" />
-                  <p className="text-gray-700 font-semibold mb-1">AI 正在生成学习路线</p>
-                  <p className="text-gray-400 text-sm mb-3">分析学习目标，规划最优路径...</p>
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 rounded-full">
+                  <p className="text-gray-700 dark:text-slate-300 font-semibold mb-1">AI 正在生成学习路线</p>
+                  <p className="text-gray-400 dark:text-slate-500 text-sm mb-3">分析学习目标，规划最优路径...</p>
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-full">
                     <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
                     <span className="text-xs text-indigo-500">约需 20-40 秒</span>
                   </div>
@@ -530,9 +540,9 @@ export default function GoalDetail() {
               {autoGenStage === 'plan' && (
                 <div>
                   <Loader2 size={44} className="mx-auto mb-4 text-emerald-400 animate-spin" />
-                  <p className="text-gray-700 font-semibold mb-1">学习路线已生成</p>
-                  <p className="text-gray-400 text-sm mb-3">正在为你准备今日学习规划...</p>
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 rounded-full">
+                  <p className="text-gray-700 dark:text-slate-300 font-semibold mb-1">学习路线已生成</p>
+                  <p className="text-gray-400 dark:text-slate-500 text-sm mb-3">正在为你准备今日学习规划...</p>
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-full">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     <span className="text-xs text-emerald-600">约需 10-20 秒</span>
                   </div>
@@ -543,8 +553,8 @@ export default function GoalDetail() {
                   <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-emerald-100 flex items-center justify-center">
                     <CheckCircle2 size={28} className="text-emerald-500" />
                   </div>
-                  <p className="text-gray-700 font-semibold mb-1">一切就绪！</p>
-                  <p className="text-gray-400 text-sm">{autoGenError || '学习路线和今日规划已生成'}</p>
+                  <p className="text-gray-700 dark:text-slate-300 font-semibold mb-1">一切就绪！</p>
+                  <p className="text-gray-400 dark:text-slate-500 text-sm">{autoGenError || '学习路线和今日规划已生成'}</p>
                 </div>
               )}
               {autoGenStage === 'error' && (
@@ -552,8 +562,8 @@ export default function GoalDetail() {
                   <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
                     <AlertCircle size={28} className="text-red-400" />
                   </div>
-                  <p className="text-gray-700 font-semibold mb-1">生成失败</p>
-                  <p className="text-gray-400 text-sm mb-5 max-w-sm mx-auto">{autoGenError}</p>
+                  <p className="text-gray-700 dark:text-slate-300 font-semibold mb-1">生成失败</p>
+                  <p className="text-gray-400 dark:text-slate-500 text-sm mb-5 max-w-sm mx-auto">{autoGenError}</p>
                   <button
                     onClick={() => { autoGenTried.current = false; setAutoGenStage('idle'); startAutoGenerate() }}
                     className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 text-sm cursor-pointer transition-all shadow-md shadow-indigo-200 font-medium"
@@ -566,7 +576,7 @@ export default function GoalDetail() {
           ) : (
             <div className="text-center py-8">
               <BookOpen size={40} className="mx-auto mb-3 text-gray-200" />
-              <p className="text-gray-400 text-sm mb-4">暂无学习路线</p>
+              <p className="text-gray-400 dark:text-slate-500 text-sm mb-4">暂无学习路线</p>
               <button onClick={handleGenerateRoadmap} disabled={!!actionLoading}
                 className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 text-sm cursor-pointer transition-all shadow-md shadow-indigo-200 font-medium">
                 生成路线
@@ -575,9 +585,9 @@ export default function GoalDetail() {
           )
         ) : (
           <div className="space-y-2">
-            {phases.map((p: any, i: number) => (
-              <details key={p.phase} className="group border border-gray-100 rounded-xl overflow-hidden">
-                <summary className="cursor-pointer px-4 py-3 flex items-center justify-between hover:bg-gray-50/50 transition-colors list-none">
+            {phases.map((p: any) => (
+              <details key={p.phase} className="group border border-gray-100 dark:border-slate-800 rounded-xl overflow-hidden">
+                <summary className="cursor-pointer px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800/50 transition-colors list-none">
                   <div className="flex items-center gap-3">
                     <span className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center text-xs font-bold text-indigo-600">
                       {p.phase}
@@ -586,8 +596,8 @@ export default function GoalDetail() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-gray-400">{p.duration_days}天</span>
-                    <ChevronDown size={16} className="text-gray-300 group-open:hidden" />
-                    <ChevronUp size={16} className="text-gray-300 hidden group-open:block" />
+                    <ChevronDown size={16} className="text-gray-300 dark:text-slate-600 group-open:hidden" />
+                    <ChevronUp size={16} className="text-gray-300 dark:text-slate-600 hidden group-open:block" />
                   </div>
                 </summary>
                 <div className="px-4 pb-3 pl-14 space-y-1">
@@ -601,12 +611,12 @@ export default function GoalDetail() {
                         disabled={topicLoading === t.day}
                         className={`w-full flex items-center gap-2 py-1.5 text-sm rounded-lg px-2 cursor-pointer transition-colors disabled:opacity-50 ${
                           isLearned
-                            ? 'bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100'
-                            : 'text-gray-600 hover:bg-indigo-50'
+                            ? 'bg-emerald-50 dark:bg-emerald-900/30/50 text-emerald-700 hover:bg-emerald-100'
+                            : 'text-gray-600 dark:text-slate-400 hover:bg-indigo-50 dark:bg-indigo-900/30'
                         }`}
                       >
                         <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-mono shrink-0 ${
-                          isLearned ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-50 text-indigo-500'
+                          isLearned ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500'
                         }`}>
                           {isLearned ? <CheckCircle2 size={11} /> : t.day}
                         </span>
@@ -625,19 +635,19 @@ export default function GoalDetail() {
       </div>
 
       {/* 每日规划 */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 dark:border-slate-800 shadow-sm p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+          <h2 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2">
             <Calendar size={18} className="text-indigo-500" />
             {isToday ? '今日规划' : '规划'}
             {tasks.length > 0 && (
-              <span className="text-[11px] text-gray-400 font-normal ml-1">点击任务开始学习</span>
+              <span className="text-[11px] text-gray-400 dark:text-slate-500 font-normal ml-1">点击任务开始学习</span>
             )}
           </h2>
           <div className="flex items-center gap-1">
             {currentPlan && (
               <button onClick={() => exportPlan(+id!, planDate).then(b => downloadBlob(b, `学习规划_${planDate}.md`))}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer transition-all">
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 dark:text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:bg-indigo-900/30 rounded-lg cursor-pointer transition-all">
                 <Download size={12} /> 导出
               </button>
             )}
@@ -645,15 +655,15 @@ export default function GoalDetail() {
           <div className="flex items-center gap-1.5">
             <button onClick={() => setPlanDate(d => {
               const dt = new Date(d); dt.setDate(dt.getDate() - 1); return dt.toISOString().slice(0, 10)
-            })} className="p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors">
-              <ChevronDown size={16} className="text-gray-400 rotate-90" />
+            })} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 dark:bg-slate-800 cursor-pointer transition-colors">
+              <ChevronDown size={16} className="text-gray-400 dark:text-slate-500 rotate-90" />
             </button>
             <input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)}
-              className="px-3 py-1.5 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:border-indigo-400 outline-none" />
+              className="px-3 py-1.5 text-sm border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 focus:border-indigo-400 outline-none" />
             <button onClick={() => setPlanDate(d => {
               const dt = new Date(d); dt.setDate(dt.getDate() + 1); return dt.toISOString().slice(0, 10)
-            })} className="p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors">
-              <ChevronDown size={16} className="text-gray-400 -rotate-90" />
+            })} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 dark:bg-slate-800 cursor-pointer transition-colors">
+              <ChevronDown size={16} className="text-gray-400 dark:text-slate-500 -rotate-90" />
             </button>
           </div>
         </div>
@@ -664,7 +674,7 @@ export default function GoalDetail() {
         ) : !currentPlan ? (
           <div className="text-center py-8">
             <Calendar size={36} className="mx-auto mb-2 text-gray-200" />
-            <p className="text-gray-400 text-sm mb-4">{fmtDate(planDate)} 暂无规划</p>
+            <p className="text-gray-400 dark:text-slate-500 text-sm mb-4">{fmtDate(planDate)} 暂无规划</p>
             {isToday && (
               <button onClick={handleGeneratePlan} disabled={!!actionLoading}
                 className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 text-sm cursor-pointer transition-all shadow-md shadow-indigo-200 font-medium">
@@ -682,8 +692,8 @@ export default function GoalDetail() {
                 key={i}
                 onClick={() => setSelectedTask(t)}
                 className={`flex items-start gap-3 p-3.5 rounded-xl transition-all cursor-pointer group ${
-                  currentPlan?.completed ? 'bg-emerald-50/50' :
-                  isToday ? 'bg-gray-50 hover:bg-indigo-50 hover:shadow-sm' : 'bg-gray-50/50'
+                  currentPlan?.completed ? 'bg-emerald-50 dark:bg-emerald-900/30/50' :
+                  isToday ? 'bg-gray-50 dark:bg-slate-800 hover:bg-indigo-50 dark:bg-indigo-900/30 hover:shadow-sm' : 'bg-gray-50 dark:bg-slate-800/50'
                 }`}
               >
                 {isToday && (
@@ -703,7 +713,7 @@ export default function GoalDetail() {
                 )}
                 <div className="flex-1 min-w-0">
                   <div className={`text-sm font-medium flex items-center gap-2 ${
-                    currentPlan?.completed ? 'text-gray-400 line-through' : 'text-gray-800'
+                    currentPlan?.completed ? 'text-gray-400 dark:text-slate-500 line-through' : 'text-gray-800 dark:text-slate-200'
                   }`}>
                     {t.title}
                     {t.materials && (
@@ -720,7 +730,7 @@ export default function GoalDetail() {
             ))}
             {/* 旧规划没有材料时提示 */}
             {tasks.length > 0 && !tasks.some((t: any) => t.materials) && isToday && (
-              <div className="mt-3 p-3 bg-indigo-50 rounded-xl text-xs text-indigo-600 flex items-center justify-between">
+              <div className="mt-3 p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl text-xs text-indigo-600 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <AlertCircle size={13} />
                   此规划不含学习材料，重新生成后可点击任务直接学习
@@ -732,7 +742,7 @@ export default function GoalDetail() {
               </div>
             )}
             {planNote && (
-              <div className="mt-3 p-3 bg-amber-50 rounded-xl text-xs text-amber-700 flex items-start gap-2">
+              <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/30 rounded-xl text-xs text-amber-700 flex items-start gap-2">
                 <AlertCircle size={13} className="shrink-0 mt-0.5" />
                 {planNote}
               </div>
@@ -750,11 +760,11 @@ export default function GoalDetail() {
         const progressPct = totalTopics > 0 ? Math.round((learnedCount / totalTopics) * 100) : 0
 
         return (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
-            <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 dark:border-slate-800 shadow-sm p-5 mb-5">
+            <h2 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2 mb-4">
               <Play size={18} className="text-emerald-500" />
               继续学习
-              <span className="text-xs text-gray-400 font-normal">按路线顺序 • 无限制</span>
+              <span className="text-xs text-gray-400 dark:text-slate-500 font-normal">按路线顺序 • 无限制</span>
             </h2>
 
             {/* 进度条 */}
@@ -765,7 +775,7 @@ export default function GoalDetail() {
                 </span>
                 <span className="text-xs font-medium text-indigo-600">{progressPct}%</span>
               </div>
-              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div className="w-full h-2 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full transition-all duration-500"
                   style={{ width: `${progressPct}%` }}
@@ -780,7 +790,7 @@ export default function GoalDetail() {
                     <p className="text-[11px] text-emerald-600 font-medium mb-1">
                       Phase {nextTopic.phaseNum} · {nextTopic.phaseTitle}
                     </p>
-                    <p className="text-sm font-semibold text-gray-900 mb-1">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-slate-100 mb-1">
                       Day {nextTopic.day}：{nextTopic.title}
                     </p>
                     <p className="text-xs text-gray-500">
@@ -804,14 +814,14 @@ export default function GoalDetail() {
             ) : (
               <div className="text-center py-8">
                 <CheckCircle2 size={40} className="mx-auto mb-3 text-emerald-300" />
-                <p className="text-gray-500 font-medium mb-1">全部学完了！</p>
-                <p className="text-gray-400 text-sm mb-4">路线中所有 {totalTopics} 节内容都已完成</p>
+                <p className="text-gray-500 dark:text-slate-400 font-medium mb-1">全部学完了！</p>
+                <p className="text-gray-400 dark:text-slate-500 text-sm mb-4">路线中所有 {totalTopics} 节内容都已完成</p>
                 <button
                   onClick={() => {
                     setLearnedDays(new Set())
                     localStorage.removeItem(learnedKey)
                   }}
-                  className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-xl cursor-pointer transition-colors"
+                  className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:text-slate-300 border border-gray-200 dark:border-slate-700 rounded-xl cursor-pointer transition-colors"
                 >
                   重置进度，重新来过
                 </button>
@@ -821,7 +831,7 @@ export default function GoalDetail() {
             {/* 已学列表（可折叠） */}
             {learnedCount > 0 && (
               <details className="mt-4 group">
-                <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-600 list-none flex items-center gap-1">
+                <summary className="cursor-pointer text-xs text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:text-slate-400 list-none flex items-center gap-1">
                   已学 {learnedCount} 节
                   <ChevronDown size={12} className="group-open:rotate-180 transition-transform" />
                 </summary>
@@ -832,13 +842,13 @@ export default function GoalDetail() {
                       <button
                         key={t.day}
                         onClick={() => handleLearnTopic(t.day, t.title)}
-                        className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors flex items-center gap-2"
+                        className="w-full text-left px-3 py-1.5 text-xs text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-lg cursor-pointer transition-colors flex items-center gap-2"
                       >
                         <span className="w-5 h-5 rounded bg-emerald-100 flex items-center justify-center text-[10px] font-mono text-emerald-600 shrink-0">
                           {t.day}
                         </span>
                         {t.title}
-                        <span className="text-gray-300 ml-auto shrink-0">复习</span>
+                        <span className="text-gray-300 dark:text-slate-600 ml-auto shrink-0">复习</span>
                       </button>
                     ))}
                 </div>
@@ -850,14 +860,14 @@ export default function GoalDetail() {
 
       {/* 今日问题 + AI 搭子 */}
       {isToday && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 dark:border-slate-800 shadow-sm p-5 mb-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+            <h2 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2">
               <Brain size={18} className="text-indigo-500" />
               今日问题
             </h2>
             <button onClick={handleGenerateQuestions} disabled={actionLoading === '生成问题'}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-all bg-white">
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 dark:border-slate-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800 disabled:opacity-50 cursor-pointer transition-all bg-white">
               <Sparkles size={13} className="text-indigo-500" />
               生成问题
             </button>
@@ -868,7 +878,7 @@ export default function GoalDetail() {
               {questions.length === 0 ? (
                 <div className="text-center py-8">
                   <MessageCircle size={36} className="mx-auto mb-2 text-gray-200" />
-                  <p className="text-gray-400 text-sm">暂无问题，点击生成获取今日练习</p>
+                  <p className="text-gray-400 dark:text-slate-500 text-sm">暂无问题，点击生成获取今日练习</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -878,9 +888,9 @@ export default function GoalDetail() {
                       const eval_ = evaluations[q.id]
                       return (
                         <div key={q.id} className={`p-4 rounded-xl border transition-all ${
-                          eval_ ? 'border-emerald-200 bg-emerald-50/50' : 'border-indigo-100 bg-indigo-50/50'
+                          eval_ ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-900/30/50' : 'border-indigo-100 bg-indigo-50 dark:bg-indigo-900/30/50'
                         }`}>
-                          <p className="text-sm font-medium text-gray-900 mb-3 flex items-start gap-2">
+                          <p className="text-sm font-medium text-gray-900 dark:text-slate-100 mb-3 flex items-start gap-2">
                             <MessageCircle size={14} className="text-indigo-400 mt-0.5 shrink-0" />
                             {q.question}
                             <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
@@ -898,20 +908,20 @@ export default function GoalDetail() {
                                   }`}>评分: {eval_.score}/10</span>
                                 </div>
                                 {eval_.correctness && (
-                                  <p className="text-xs text-gray-600 mb-1.5">{eval_.correctness}</p>
+                                  <p className="text-xs text-gray-600 dark:text-slate-400 mb-1.5">{eval_.correctness}</p>
                                 )}
                                 {eval_.depth && (
-                                  <p className="text-xs text-gray-500 mb-1.5">理解深度: {eval_.depth}</p>
+                                  <p className="text-xs text-gray-500 dark:text-slate-400 mb-1.5">理解深度: {eval_.depth}</p>
                                 )}
                                 {eval_.suggestion && (
-                                  <p className="text-xs text-indigo-600 bg-indigo-50 p-2.5 rounded-lg leading-relaxed">{eval_.suggestion}</p>
+                                  <p className="text-xs text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 p-2.5 rounded-lg leading-relaxed">{eval_.suggestion}</p>
                                 )}
                               </div>
                             </div>
                           ) : (
                             <div className="space-y-2">
                               <textarea
-                                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none resize-none transition-all"
+                                className="w-full px-3 py-2 border border-gray-200 dark:border-slate-700 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none resize-none transition-all"
                                 rows={3}
                                 placeholder="写下你的回答..."
                                 value={answers[q.id] || ''}
@@ -937,7 +947,7 @@ export default function GoalDetail() {
               )}
               {/* 生成更多题目 */}
               {questions.length > 0 && questions.every((q: any) => q.status === 'answered' || evaluations[q.id]) && (
-                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between">
                   <span className="text-xs text-gray-400">全部答完，可以继续刷题</span>
                   <button onClick={handleGenerateQuestions} disabled={actionLoading === '生成问题'}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 cursor-pointer transition-all shadow-sm shadow-indigo-200">
@@ -954,7 +964,7 @@ export default function GoalDetail() {
 
             {/* 右侧：AI 学习搭子 */}
             <div className="lg:w-80 shrink-0 lg:border-l lg:border-gray-100 lg:pl-5">
-              <h3 className="text-xs font-medium text-gray-500 mb-3 flex items-center gap-1.5">
+              <h3 className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-3 flex items-center gap-1.5">
                 <Sparkles size={12} className="text-amber-400" /> AI 学习搭子
               </h3>
               {chatHistory.length > 0 && (
@@ -962,16 +972,16 @@ export default function GoalDetail() {
                   {chatHistory.map((m, i) => (
                     <div key={i} className={`text-sm p-2.5 rounded-xl ${
                       m.role === 'user'
-                        ? 'bg-indigo-50 text-gray-700 ml-4'
-                        : 'bg-amber-50 text-gray-700 mr-4'
+                        ? 'bg-indigo-50 dark:bg-indigo-900/30 text-gray-700 dark:text-slate-300 ml-4'
+                        : 'bg-amber-50 dark:bg-amber-900/30 text-gray-700 dark:text-slate-300 mr-4'
                     }`}>
-                      <p className="text-[10px] text-gray-400 mb-0.5">{m.role === 'user' ? '你' : 'AI 搭子'}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-slate-500 mb-0.5">{m.role === 'user' ? '你' : 'AI 搭子'}</p>
                       <p className="leading-relaxed whitespace-pre-wrap">{m.content}</p>
                     </div>
                   ))}
                   {chatLoading && (
-                    <div className="bg-amber-50 text-gray-700 mr-4 text-sm p-2.5 rounded-xl">
-                      <p className="text-[10px] text-gray-400 mb-0.5">AI 搭子</p>
+                    <div className="bg-amber-50 dark:bg-amber-900/30 text-gray-700 dark:text-slate-300 mr-4 text-sm p-2.5 rounded-xl">
+                      <p className="text-[10px] text-gray-400 dark:text-slate-500 mb-0.5">AI 搭子</p>
                       <Loader2 size={14} className="animate-spin text-amber-400" />
                     </div>
                   )}
@@ -981,7 +991,7 @@ export default function GoalDetail() {
               <div className="flex gap-1.5">
                 <input
                   type="text"
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none transition-all"
+                  className="flex-1 px-3 py-2 border border-gray-200 dark:border-slate-700 rounded-xl text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none transition-all"
                   placeholder="提问，按回车发送..."
                   value={chatInput}
                   onChange={e => setChatInput(e.target.value)}
@@ -1001,51 +1011,51 @@ export default function GoalDetail() {
       )}
 
       {/* 学习日志 */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 dark:border-slate-800 shadow-sm p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+          <h2 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2">
             <PenLine size={18} className="text-indigo-500" />
             {isToday ? '今日学习心得' : `${fmtDate(planDate)} 记录`}
           </h2>
           <button onClick={() => exportJournal(+id!).then(b => downloadBlob(b, '学习日志.md'))}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer transition-all">
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 dark:text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:bg-indigo-900/30 rounded-lg cursor-pointer transition-all">
             <Download size={12} /> 导出
           </button>
         </div>
         {goal.today_journal && isToday ? (
           <div className="space-y-3">
-            <div className="p-4 bg-gray-50 rounded-xl">
-              <p className="text-xs text-gray-400 mb-1 flex items-center gap-1"><BookOpen size={12} /> 学习内容</p>
-              <p className="text-sm text-gray-800">{goal.today_journal.content || '无'}</p>
+            <div className="p-4 bg-gray-50 dark:bg-slate-800 rounded-xl">
+              <p className="text-xs text-gray-400 dark:text-slate-500 mb-1 flex items-center gap-1"><BookOpen size={12} /> 学习内容</p>
+              <p className="text-sm text-gray-800 dark:text-slate-200">{goal.today_journal.content || '无'}</p>
             </div>
-            <div className="p-4 bg-gray-50 rounded-xl">
-              <p className="text-xs text-gray-400 mb-1 flex items-center gap-1"><Brain size={12} /> 心得反思</p>
-              <p className="text-sm text-gray-800">{goal.today_journal.reflection || '无'}</p>
+            <div className="p-4 bg-gray-50 dark:bg-slate-800 rounded-xl">
+              <p className="text-xs text-gray-400 dark:text-slate-500 mb-1 flex items-center gap-1"><Brain size={12} /> 心得反思</p>
+              <p className="text-sm text-gray-800 dark:text-slate-200">{goal.today_journal.reflection || '无'}</p>
             </div>
             {goal.today_journal.duration_minutes > 0 && (
-              <p className="text-xs text-gray-400 flex items-center gap-1"><Clock size={12} /> {goal.today_journal.duration_minutes}分钟</p>
+              <p className="text-xs text-gray-400 dark:text-slate-500 flex items-center gap-1"><Clock size={12} /> {goal.today_journal.duration_minutes}分钟</p>
             )}
           </div>
         ) : isToday ? (
           <div className="space-y-3">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">今天学了什么？</label>
-              <textarea className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none resize-none transition-all" rows={3}
+              <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1.5">今天学了什么？</label>
+              <textarea className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none resize-none transition-all" rows={3}
                 placeholder="记录今天学习的内容..." value={journalContent}
                 onChange={e => setJournalContent(e.target.value)} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">学习心得与反思</label>
-              <textarea className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none resize-none transition-all" rows={2}
+              <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1.5">学习心得与反思</label>
+              <textarea className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none resize-none transition-all" rows={2}
                 placeholder="今天的感受、遇到的困难、收获..." value={journalReflection}
                 onChange={e => setJournalReflection(e.target.value)} />
             </div>
             <div className="flex items-center gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">学习时长（分钟）</label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1.5">学习时长（分钟）</label>
                 <input type="number" min={0} value={journalDuration}
                   onChange={e => setJournalDuration(+e.target.value || 0)}
-                  className="w-24 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-indigo-400 outline-none" />
+                  className="w-24 px-3 py-2 border border-gray-200 dark:border-slate-700 rounded-xl text-sm focus:border-indigo-400 outline-none" />
               </div>
               <button onClick={handleSaveJournal}
                 disabled={savingJournal || (!journalContent.trim() && !journalReflection.trim())}
@@ -1061,7 +1071,7 @@ export default function GoalDetail() {
             </div>
           </div>
         ) : (
-          <p className="text-sm text-gray-400 text-center py-6">切换到「今天」可查看和编辑今日日志</p>
+          <p className="text-sm text-gray-400 dark:text-slate-500 text-center py-6">切换到「今天」可查看和编辑今日日志</p>
         )}
         <div className="mt-4 pt-3 border-t border-gray-100">
           <Link to={`/goals/${id}/history`} className="text-sm text-indigo-500 hover:text-indigo-700 flex items-center gap-1 transition-colors">

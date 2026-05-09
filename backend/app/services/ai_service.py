@@ -15,6 +15,21 @@ def chat(messages: list[dict], temperature: float = 0.7, timeout: float | None =
     return resp.choices[0].message.content or ''
 
 
+def chat_stream(messages: list[dict], temperature: float = 0.7):
+    """调用 DeepSeek 流式聊天，逐 token 输出"""
+    resp = client.chat.completions.create(
+        model='deepseek-chat',
+        messages=messages,
+        temperature=temperature,
+        stream=True,
+        timeout=90.0,
+    )
+    for chunk in resp:
+        delta = chunk.choices[0].delta
+        if delta.content:
+            yield delta.content
+
+
 def chat_json(messages: list[dict], temperature: float = 0.7, timeout: float | None = None) -> dict:
     """调用 DeepSeek 聊天，提取 JSON 返回"""
     kwargs = dict(model='deepseek-chat', messages=messages, temperature=temperature)

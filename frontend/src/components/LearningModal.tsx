@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   BookOpen, Clock, Lightbulb, Code, PenLine, X, Target,
   Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Save, Loader2, AlertCircle,
@@ -56,25 +56,25 @@ function renderMarkdown(text: string) {
   if (!text || typeof text !== 'string') return null
 
   let html = text.replace(/\n(\|.+\|)\n\|[-| :]+\|\n((?:\|.+\|\n?)+)/g, (_m: string, header: string, _sep: string, rows: string) => {
-    const hCells = header.split('|').filter(c => c.trim()).map(c => `<th class="px-3 py-2 text-left text-xs font-semibold text-gray-700 bg-gray-50 border-b border-gray-200">${c.trim()}</th>`).join('')
+    const hCells = header.split('|').filter(c => c.trim()).map(c => `<th class="px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-800 border-b border-gray-200">${c.trim()}</th>`).join('')
     const rHtml = rows.trim().split('\n').map((row: string) => {
-      const cells = row.split('|').filter(c => c.trim()).map(c => `<td class="px-3 py-2 text-xs text-gray-600 border-b border-gray-100">${c.trim()}</td>`).join('')
+      const cells = row.split('|').filter(c => c.trim()).map(c => `<td class="px-3 py-2 text-xs text-gray-600 dark:text-slate-400 border-b border-gray-100">${c.trim()}</td>`).join('')
       return `<tr>${cells}</tr>`
     }).join('')
-    return `\n<table class="w-full my-3 border border-gray-200 rounded-lg overflow-hidden"><thead><tr>${hCells}</tr></thead><tbody>${rHtml}</tbody></table>\n`
+    return `\n<table class="w-full my-3 border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden"><thead><tr>${hCells}</tr></thead><tbody>${rHtml}</tbody></table>\n`
   })
 
   html = html
-    .replace(/### (.+)/g, '<h3 class="text-base font-semibold text-gray-800 mt-4 mb-2">$1</h3>')
-    .replace(/## (.+)/g, '<h2 class="text-lg font-semibold text-gray-900 mt-5 mb-2">$1</h2>')
-    .replace(/# (.+)/g, '<h1 class="text-xl font-bold text-gray-900 mt-5 mb-2">$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
+    .replace(/### (.+)/g, '<h3 class="text-base font-semibold text-gray-800 dark:text-slate-200 mt-4 mb-2">$1</h3>')
+    .replace(/## (.+)/g, '<h2 class="text-lg font-semibold text-gray-900 dark:text-slate-100 mt-5 mb-2">$1</h2>')
+    .replace(/# (.+)/g, '<h1 class="text-xl font-bold text-gray-900 dark:text-slate-100 mt-5 mb-2">$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-gray-900 dark:text-slate-100">$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded text-xs font-mono">$1</code>')
+    .replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded text-xs font-mono">$1</code>')
     .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="bg-gray-900 text-gray-100 p-4 rounded-xl text-xs overflow-x-auto my-3 font-mono leading-relaxed">$2</pre>')
-    .replace(/^> (.+)/gm, '<blockquote class="border-l-4 border-indigo-300 bg-indigo-50/50 pl-4 py-2 my-2 rounded-r-lg text-sm text-gray-700 italic">$1</blockquote>')
-    .replace(/^- (.+)/gm, '<li class="ml-4 text-sm text-gray-700 list-disc">$1</li>')
-    .replace(/^(\d+)\. (.+)/gm, '<li class="ml-4 text-sm text-gray-700 list-decimal">$1. $2</li>')
+    .replace(/^> (.+)/gm, '<blockquote class="border-l-4 border-indigo-300 bg-indigo-50 dark:bg-indigo-900/30/50 pl-4 py-2 my-2 rounded-r-lg text-sm text-gray-700 dark:text-slate-300 italic">$1</blockquote>')
+    .replace(/^- (.+)/gm, '<li class="ml-4 text-sm text-gray-700 dark:text-slate-300 list-disc">$1</li>')
+    .replace(/^(\d+)\. (.+)/gm, '<li class="ml-4 text-sm text-gray-700 dark:text-slate-300 list-decimal">$1. $2</li>')
     .replace(/\n\n/g, '<br/><br/>')
   return <div dangerouslySetInnerHTML={{ __html: html }} />
 }
@@ -126,7 +126,8 @@ export default function LearningModal({
   error?: string
   onRetry?: () => void
 }) {
-  const m = task.materials
+  const m = task.materials!
+  if (!m) return null
   const [activeSection, setActiveSection] = useState<string>('summary')
 
   // 加载计时
@@ -306,22 +307,22 @@ export default function LearningModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-gray-100 flex"
+      className="fixed inset-0 z-50 bg-gray-100 dark:bg-slate-800 flex"
     >
       {/* 左侧大纲导航 */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
+      <aside className="w-64 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex flex-col shrink-0">
         <div className="p-4 border-b border-gray-100">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-2 shadow-md shadow-indigo-200">
             <BookOpen size={17} className="text-white" />
           </div>
-          <h3 className="text-sm font-semibold text-gray-900 leading-tight">{task.title}</h3>
-          <p className="text-[11px] text-gray-400 mt-0.5">{task.duration_min} 分钟</p>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100 leading-tight">{task.title}</h3>
+          <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-0.5">{task.duration_min} 分钟</p>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          <p className="text-[10px] text-gray-400 px-3 pb-1 uppercase tracking-wider">点击章节 → AI 自动讲解</p>
+          <p className="text-[10px] text-gray-400 dark:text-slate-500 px-3 pb-1 uppercase tracking-wider">点击章节 → AI 自动讲解</p>
           {sections.map((id) => {
-            const icons: Record<string, JSX.Element> = {
+            const icons: Record<string, React.ReactNode> = {
               objectives: <Target size={12} />,
               summary: <Lightbulb size={12} />,
               concepts: <Target size={12} />,
@@ -340,8 +341,8 @@ export default function LearningModal({
                 }}
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer ${
                   activeSection === id
-                    ? 'bg-indigo-50 text-indigo-700 font-medium'
-                    : 'text-gray-500 hover:bg-gray-50'
+                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 font-medium'
+                    : 'text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 dark:bg-slate-800'
                 }`}
               >
                 {icons[id]}
@@ -356,31 +357,31 @@ export default function LearningModal({
       {/* 中间主内容区 */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* 顶部栏 — 含紧凑计时器 */}
-        <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+        <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 px-6 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <button onClick={onClose}
-              className="p-2 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors shrink-0">
-              <X size={18} className="text-gray-400" />
+              className="p-2 rounded-lg hover:bg-gray-100 dark:bg-slate-800 cursor-pointer transition-colors shrink-0">
+              <X size={18} className="text-gray-400 dark:text-slate-500" />
             </button>
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-gray-900 truncate">{task.title}</h2>
-              {task.detail && <p className="text-xs text-gray-400 truncate">{task.detail}</p>}
+              <h2 className="text-base font-semibold text-gray-900 dark:text-slate-100 truncate">{task.title}</h2>
+              {task.detail && <p className="text-xs text-gray-400 dark:text-slate-500 truncate">{task.detail}</p>}
             </div>
           </div>
 
           {/* 紧凑计时器 */}
           <div className="flex items-center gap-2 ml-4 shrink-0">
             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium ${
-              timerMode === 'focus' ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'
+              timerMode === 'focus' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600' : 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600'
             }`}>
               <Clock size={13} />
               <span>{formatTime(timerSeconds)}</span>
-              <span className="text-[10px] font-normal text-gray-400">
+              <span className="text-[10px] font-normal text-gray-400 dark:text-slate-500">
                 {timerMode === 'focus' ? `/${task.duration_min}min` : '休息'}
               </span>
             </div>
             {/* 微型进度条 */}
-            <div className="w-12 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div className="w-12 h-1.5 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-1000 ${
                   timerMode === 'focus' ? 'bg-indigo-500' : 'bg-emerald-500'
@@ -392,19 +393,19 @@ export default function LearningModal({
               className={`p-1.5 rounded-lg cursor-pointer transition-all ${
                 isRunning
                   ? 'bg-amber-100 text-amber-600 hover:bg-amber-200'
-                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200'
               }`}>
               {isRunning ? <Pause size={14} /> : <Play size={14} />}
             </button>
             <button onClick={resetTimer}
-              className="p-1.5 rounded-lg bg-gray-100 text-gray-400 hover:bg-gray-200 cursor-pointer transition-all">
+              className="p-1.5 rounded-lg bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500 hover:bg-gray-200 cursor-pointer transition-all">
               <RotateCcw size={13} />
             </button>
             <span className="w-px h-5 bg-gray-200 mx-1" />
             <button
               onClick={() => setShowRightPanel(!showRightPanel)}
-              className="p-2 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors">
-              {showRightPanel ? <ChevronRight size={16} className="text-gray-400" /> : <ChevronLeft size={16} className="text-gray-400" />}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:bg-slate-800 cursor-pointer transition-colors">
+              {showRightPanel ? <ChevronRight size={16} className="text-gray-400 dark:text-slate-500" /> : <ChevronLeft size={16} className="text-gray-400 dark:text-slate-500" />}
             </button>
           </div>
         </header>
@@ -416,22 +417,22 @@ export default function LearningModal({
               loading ? (
                 <div className="text-center py-20">
                   <Loader2 size={48} className="mx-auto mb-5 text-indigo-400 animate-spin" />
-                  <p className="text-gray-500 font-medium mb-1">AI 正在生成学习材料...</p>
-                  <p className="text-gray-400 text-sm mb-2">预计需要 30-60 秒，已等待 {loadElapsed} 秒</p>
-                  <p className="text-gray-300 text-xs mb-6">AI 正在深度分析主题并撰写内容，请耐心等待</p>
+                  <p className="text-gray-500 dark:text-slate-400 font-medium mb-1">AI 正在生成学习材料...</p>
+                  <p className="text-gray-400 dark:text-slate-500 text-sm mb-2">预计需要 30-60 秒，已等待 {loadElapsed} 秒</p>
+                  <p className="text-gray-300 dark:text-slate-600 text-xs mb-6">AI 正在深度分析主题并撰写内容，请耐心等待</p>
                   <button onClick={onClose}
-                    className="px-4 py-2 bg-gray-100 text-gray-500 rounded-xl hover:bg-gray-200 cursor-pointer text-sm transition-all">
+                    className="px-4 py-2 bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 rounded-xl hover:bg-gray-200 cursor-pointer text-sm transition-all">
                     取消等待
                   </button>
                 </div>
               ) : error ? (
                 <div className="text-center py-16">
-                  <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-red-50 flex items-center justify-center">
+                  <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-red-50 dark:bg-red-900/30 flex items-center justify-center">
                     <AlertCircle size={32} className="text-red-400" />
                   </div>
-                  <p className="text-gray-700 font-medium mb-1">学习材料生成失败</p>
-                  <p className="text-gray-400 text-sm mb-1 max-w-md mx-auto">{error}</p>
-                  <p className="text-gray-300 text-xs mb-6">可能是网络波动或 AI 服务繁忙，点击重试</p>
+                  <p className="text-gray-700 dark:text-slate-300 font-medium mb-1">学习材料生成失败</p>
+                  <p className="text-gray-400 dark:text-slate-500 text-sm mb-1 max-w-md mx-auto">{error}</p>
+                  <p className="text-gray-300 dark:text-slate-600 text-xs mb-6">可能是网络波动或 AI 服务繁忙，点击重试</p>
                   <div className="flex items-center justify-center gap-3">
                     {onRetry && (
                       <button onClick={onRetry}
@@ -440,16 +441,16 @@ export default function LearningModal({
                       </button>
                     )}
                     <button onClick={onClose}
-                      className="px-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 cursor-pointer text-sm font-medium transition-all">
+                      className="px-5 py-2.5 bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 rounded-xl hover:bg-gray-200 cursor-pointer text-sm font-medium transition-all">
                       返回
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="text-center py-20">
-                  <BookOpen size={56} className="mx-auto mb-5 text-gray-200" />
-                  <p className="text-gray-500 font-medium mb-1">暂无学习材料</p>
-                  <p className="text-gray-400 text-sm mb-6">此规划是旧版生成的，需重新生成以获取详细学习内容</p>
+                  <BookOpen size={56} className="mx-auto mb-5 text-gray-200 dark:text-slate-700" />
+                  <p className="text-gray-500 dark:text-slate-400 font-medium mb-1">暂无学习材料</p>
+                  <p className="text-gray-400 dark:text-slate-500 text-sm mb-6">此规划是旧版生成的，需重新生成以获取详细学习内容</p>
                   {onRegenerate && (
                     <button onClick={() => { onClose(); onRegenerate() }}
                       className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 cursor-pointer text-sm font-medium transition-all shadow-md shadow-indigo-200">
@@ -463,13 +464,13 @@ export default function LearningModal({
                 {/* 学习目标 */}
                 {m.learning_objectives && m.learning_objectives.length > 0 && (
                   <section id="sec-objectives">
-                    <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2 mb-4">
                       <Target size={16} className="text-emerald-500" /> {sectionLabels.objectives}
                     </h3>
-                    <div className="bg-emerald-50 rounded-2xl border border-emerald-100 p-5">
+                    <div className="bg-emerald-50 dark:bg-emerald-900/30 rounded-2xl border border-emerald-100 p-5">
                       <ul className="space-y-2">
                         {m.learning_objectives.map((obj, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                          <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-slate-300">
                             <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-700 flex items-center justify-center shrink-0 text-[10px] font-bold mt-0.5">
                               {i + 1}
                             </span>
@@ -488,7 +489,7 @@ export default function LearningModal({
                       <h3 className="text-sm font-semibold text-indigo-700 flex items-center gap-1.5 mb-2">
                         <Lightbulb size={15} /> {sectionLabels.summary}
                       </h3>
-                      <p className="text-sm text-gray-700 leading-relaxed">{m.summary}</p>
+                      <p className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed">{m.summary}</p>
                     </div>
                   </section>
                 )}
@@ -496,14 +497,14 @@ export default function LearningModal({
                 {/* 核心知识点 */}
                 {m.key_concepts && m.key_concepts.length > 0 && (
                   <section id="sec-concepts">
-                    <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2 mb-4">
                       <Target size={16} className="text-indigo-500" /> {sectionLabels.concepts}
                     </h3>
                     <div className="grid gap-3">
                       {m.key_concepts.map((kc, i) => (
-                        <div key={i} className="p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                          <p className="text-sm font-semibold text-gray-800 mb-1">{kc.name}</p>
-                          <p className="text-xs text-gray-500 leading-relaxed">{kc.explanation}</p>
+                        <div key={i} className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-slate-200 mb-1">{kc.name}</p>
+                          <p className="text-xs text-gray-500 dark:text-slate-400 leading-relaxed">{kc.explanation}</p>
                         </div>
                       ))}
                     </div>
@@ -513,11 +514,11 @@ export default function LearningModal({
                 {/* 学习内容 */}
                 {m.content && (
                   <section id="sec-content">
-                    <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2 mb-4">
                       <BookOpen size={16} className="text-indigo-500" /> {sectionLabels.content}
                     </h3>
-                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 prose prose-sm max-w-none">
-                      <div className="text-sm text-gray-700 leading-relaxed space-y-3">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm p-6 prose prose-sm max-w-none">
+                      <div className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed space-y-3">
                         {renderMarkdown(m.content)}
                       </div>
                     </div>
@@ -527,11 +528,11 @@ export default function LearningModal({
                 {/* 示例（旧版兼容） */}
                 {m.example && !m.examples && (
                   <section id="sec-example">
-                    <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2 mb-4">
                       <Code size={16} className="text-indigo-500" /> {sectionLabels.example}
                     </h3>
-                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                      <div className="text-sm text-gray-700 leading-relaxed">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm p-6">
+                      <div className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed">
                         {renderMarkdown(m.example)}
                       </div>
                     </div>
@@ -541,19 +542,19 @@ export default function LearningModal({
                 {/* 多示例（新版） */}
                 {m.examples && m.examples.length > 0 && (
                   <section id="sec-examples">
-                    <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2 mb-4">
                       <Code size={16} className="text-indigo-500" /> {sectionLabels.examples}
                     </h3>
                     <div className="space-y-4">
                       {m.examples.map((ex, i) => (
-                        <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                          <div className="px-5 py-3 bg-indigo-50/50 border-b border-indigo-100 flex items-center gap-2">
+                        <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm overflow-hidden">
+                          <div className="px-5 py-3 bg-indigo-50 dark:bg-indigo-900/30/50 border-b border-indigo-100 flex items-center gap-2">
                             <span className="w-5 h-5 rounded-md bg-indigo-500 text-white flex items-center justify-center text-[10px] font-bold">
                               {i + 1}
                             </span>
                             <div>
-                              <h4 className="text-sm font-semibold text-gray-800">{ex.title}</h4>
-                              <p className="text-[11px] text-gray-500">{ex.description}</p>
+                              <h4 className="text-sm font-semibold text-gray-800 dark:text-slate-200">{ex.title}</h4>
+                              <p className="text-[11px] text-gray-500 dark:text-slate-400">{ex.description}</p>
                             </div>
                           </div>
                           {ex.code && (
@@ -570,11 +571,11 @@ export default function LearningModal({
                 {/* 练习（旧版兼容） */}
                 {m.practice && !m.practice_questions && (
                   <section id="sec-practice">
-                    <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2 mb-4">
                       <PenLine size={16} className="text-indigo-500" /> {sectionLabels.practice}
                     </h3>
-                    <div className="bg-amber-50 rounded-2xl border border-amber-100 p-6">
-                      <div className="text-sm text-gray-700 leading-relaxed">
+                    <div className="bg-amber-50 dark:bg-amber-900/30 rounded-2xl border border-amber-100 p-6">
+                      <div className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed">
                         {renderMarkdown(m.practice)}
                       </div>
                     </div>
@@ -584,25 +585,25 @@ export default function LearningModal({
                 {/* 多练习题（新版） */}
                 {m.practice_questions && m.practice_questions.length > 0 && (
                   <section id="sec-practice_qs">
-                    <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2 mb-4">
                       <PenLine size={16} className="text-indigo-500" /> {sectionLabels.practice_qs}
                     </h3>
                     <div className="space-y-3">
                       {m.practice_questions.map((q, i) => (
-                        <details key={i} className="group bg-white rounded-xl border border-amber-100 shadow-sm overflow-hidden">
-                          <summary className="px-5 py-3 flex items-start gap-3 cursor-pointer hover:bg-amber-50/50 transition-colors list-none">
+                        <details key={i} className="group bg-white dark:bg-slate-900 rounded-xl border border-amber-100 shadow-sm overflow-hidden">
+                          <summary className="px-5 py-3 flex items-start gap-3 cursor-pointer hover:bg-amber-50 dark:bg-amber-900/30/50 transition-colors list-none">
                             <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
                               {i + 1}
                             </span>
                             <div className="flex-1">
-                              <span className="text-sm text-gray-800">{q.question}</span>
+                              <span className="text-sm text-gray-800 dark:text-slate-200">{q.question}</span>
                             </div>
-                            <ChevronRight size={14} className="text-gray-300 group-open:rotate-90 transition-transform shrink-0" />
+                            <ChevronRight size={14} className="text-gray-300 dark:text-slate-600 group-open:rotate-90 transition-transform shrink-0" />
                           </summary>
                           <div className="px-5 pb-4 pl-12">
-                            <div className="p-3 bg-amber-50 rounded-xl">
+                            <div className="p-3 bg-amber-50 dark:bg-amber-900/30 rounded-xl">
                               <p className="text-[11px] text-amber-700 font-medium mb-1">提示</p>
-                              <p className="text-xs text-gray-600">{q.hint}</p>
+                              <p className="text-xs text-gray-600 dark:text-slate-400">{q.hint}</p>
                             </div>
                           </div>
                         </details>
@@ -618,22 +619,22 @@ export default function LearningModal({
 
       {/* 右侧面板 — AI 搭子聊天（默认） */}
       {showRightPanel && (
-        <aside className="w-80 bg-white border-l border-gray-200 flex flex-col shrink-0">
+        <aside className="w-80 bg-white dark:bg-slate-900 border-l border-gray-200 dark:border-slate-700 flex flex-col shrink-0">
           {/* AI 搭子头部 */}
           <div className="p-4 border-b border-gray-100">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+              <h4 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles size={12} className="text-indigo-500" /> AI 学习搭子
               </h4>
               <button
                 onClick={() => setShowNotes(!showNotes)}
                 className={`text-[11px] flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-all ${
-                  showNotes ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  showNotes ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200'
                 }`}>
                 <PenLine size={11} /> 笔记
               </button>
             </div>
-            <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+            <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1 leading-relaxed">
               点击左侧章节，AI 自动讲解；也可直接提问
             </p>
           </div>
@@ -649,16 +650,16 @@ export default function LearningModal({
               >
                 <div className="p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-medium text-gray-500">学习笔记</span>
+                    <span className="text-[11px] font-medium text-gray-500 dark:text-slate-400">学习笔记</span>
                     <button onClick={saveNotes}
                       className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-all ${
-                        notesSaved ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        notesSaved ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200'
                       }`}>
                       <Save size={10} /> {notesSaved ? '已保存' : '保存'}
                     </button>
                   </div>
                   <textarea
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs resize-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                    className="w-full p-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs resize-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
                     rows={4}
                     placeholder="记录你的学习笔记、疑问、心得..."
                     value={notes}
@@ -673,9 +674,9 @@ export default function LearningModal({
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
             {chatMessages.length === 0 ? (
               <div className="text-center py-12">
-                <Bot size={40} className="mx-auto mb-3 text-gray-200" />
-                <p className="text-sm text-gray-400">点击左侧章节让 AI 讲解</p>
-                <p className="text-xs text-gray-300 mt-1">
+                <Bot size={40} className="mx-auto mb-3 text-gray-200 dark:text-slate-700" />
+                <p className="text-sm text-gray-400 dark:text-slate-500">点击左侧章节让 AI 讲解</p>
+                <p className="text-xs text-gray-300 dark:text-slate-600 mt-1">
                   或者直接输入问题开始对话
                 </p>
               </div>
@@ -697,7 +698,7 @@ export default function LearningModal({
                       className={`text-xs leading-relaxed px-3 py-2 rounded-xl max-w-[85%] ${
                         msg.role === 'user'
                           ? 'bg-indigo-500 text-white rounded-br-md'
-                          : 'bg-gray-100 text-gray-700 rounded-bl-md'
+                          : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-bl-md'
                       }`}
                     >
                       <div className="prose prose-xs max-w-none">{renderMarkdown(msg.content) || msg.content}</div>
@@ -714,7 +715,7 @@ export default function LearningModal({
                     <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 mt-0.5">
                       <Bot size={12} className="text-white" />
                     </div>
-                    <div className="bg-gray-100 rounded-xl rounded-bl-md px-3 py-2">
+                    <div className="bg-gray-100 dark:bg-slate-800 rounded-xl rounded-bl-md px-3 py-2">
                       <Loader2 size={14} className="animate-spin text-indigo-400" />
                     </div>
                   </div>
@@ -732,7 +733,7 @@ export default function LearningModal({
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                className="flex-1 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                className="flex-1 px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
                 placeholder="问 AI 搭子..."
                 disabled={chatLoading}
               />

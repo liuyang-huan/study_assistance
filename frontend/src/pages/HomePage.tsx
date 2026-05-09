@@ -59,19 +59,19 @@ export default function HomePage() {
     s === 'active' ? '进行中' : s === 'completed' ? '已完成' : '已暂停'
 
   const statusColor = (s: string) =>
-    s === 'active' ? 'bg-emerald-50 text-emerald-600' :
-    s === 'completed' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'
+    s === 'active' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600' :
+    s === 'completed' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400'
 
   return (
     <div className="animate-fade-in">
       {/* Hero */}
       <div className="text-center mb-8 pt-4">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 text-xs text-indigo-600 mb-4">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 text-xs text-indigo-600 mb-4">
           <Sparkles size={13} />
           AI 驱动个人学习助手
         </div>
         <h1 className="text-3xl font-bold gradient-text mb-2">今天想学什么？</h1>
-        <p className="text-gray-500 text-sm">设定目标，AI 为你量身定制学习路线</p>
+        <p className="text-gray-500 dark:text-slate-400 text-sm">设定目标，AI 为你量身定制学习路线</p>
       </div>
 
       {/* 创建表单 */}
@@ -79,7 +79,7 @@ export default function HomePage() {
         {!showForm ? (
           <button
             onClick={() => setShowForm(true)}
-            className="w-full p-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 hover:border-indigo-300 hover:text-indigo-500 transition-all cursor-pointer group"
+            className="w-full p-4 border-2 border-dashed border-gray-200 dark:border-slate-700 rounded-2xl text-gray-400 dark:text-slate-500 hover:border-indigo-300 hover:text-indigo-500 transition-all cursor-pointer group"
           >
             <Plus size={24} className="mx-auto mb-1 group-hover:scale-110 transition-transform" />
             <span className="text-sm">创建新的学习目标</span>
@@ -89,21 +89,21 @@ export default function HomePage() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             onSubmit={handleCreate}
-            className="p-5 bg-white rounded-2xl shadow-lg border border-gray-100"
+            className="p-5 bg-white dark:bg-slate-900 rounded-2xl shadow-lg border border-gray-100"
           >
             <div className="flex items-center gap-2 mb-4">
               <Target size={18} className="text-indigo-500" />
-              <span className="text-sm font-medium text-gray-700">新学习目标</span>
+              <span className="text-sm font-medium text-gray-700 dark:text-slate-300">新学习目标</span>
             </div>
             <input
-              className="w-full mb-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-base focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+              className="w-full mb-3 px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-base focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
               placeholder="想学什么？例如：学会微积分"
               value={title}
               onChange={e => setTitle(e.target.value)}
               autoFocus
             />
             <textarea
-              className="w-full mb-4 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all resize-none"
+              className="w-full mb-4 px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all resize-none"
               placeholder="补充描述（可选）：你的基础、期望的时间等"
               rows={2}
               value={description}
@@ -125,7 +125,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="px-4 py-2.5 text-gray-400 hover:text-gray-600 cursor-pointer text-sm"
+                className="px-4 py-2.5 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:text-slate-400 cursor-pointer text-sm"
               >
                 取消
               </button>
@@ -143,11 +143,11 @@ export default function HomePage() {
         </div>
       ) : goals.length === 0 ? (
         <div className="text-center py-12">
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
-            <BookOpen size={32} className="text-gray-300" />
+          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-slate-800 flex items-center justify-center">
+            <BookOpen size={32} className="text-gray-300 dark:text-slate-600" />
           </div>
-          <p className="text-gray-400 text-sm">还没有学习目标</p>
-          <p className="text-gray-300 text-xs mt-1">点击上方按钮创建第一个</p>
+          <p className="text-gray-400 dark:text-slate-500 text-sm">还没有学习目标</p>
+          <p className="text-gray-300 dark:text-slate-600 text-xs mt-1">点击上方按钮创建第一个</p>
         </div>
       ) : (
         <div className="grid gap-3 max-w-lg mx-auto">
@@ -157,7 +157,7 @@ export default function HomePage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="group relative bg-white rounded-2xl border border-gray-100 hover:border-indigo-200 hover:shadow-lg transition-all duration-300"
+              className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 hover:border-indigo-200 hover:shadow-lg transition-all duration-300"
             >
               <Link to={`/goals/${g.id}`} className="flex items-center gap-4 p-4 no-underline text-inherit">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
@@ -167,28 +167,28 @@ export default function HomePage() {
                 }`}>
                   <Target size={18} className={
                     g.status === 'active' ? 'text-indigo-500' :
-                    g.status === 'completed' ? 'text-emerald-500' : 'text-gray-400'
+                    g.status === 'completed' ? 'text-emerald-500' : 'text-gray-400 dark:text-slate-500'
                   } />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors truncate">
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 group-hover:text-indigo-600 transition-colors truncate">
                     {g.title}
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className={`text-[11px] px-2 py-0.5 rounded-full ${statusColor(g.status)}`}>
                       {statusLabel(g.status)}
                     </span>
-                    <span className="text-[11px] text-gray-400 flex items-center gap-0.5">
+                    <span className="text-[11px] text-gray-400 dark:text-slate-500 flex items-center gap-0.5">
                       <Calendar size={11} />
                       {new Date(g.created_at).toLocaleDateString('zh-CN')}
                     </span>
                   </div>
                 </div>
-                <ChevronRight size={18} className="text-gray-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
+                <ChevronRight size={18} className="text-gray-300 dark:text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
               </Link>
               <button
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(g.id) }}
-                className="absolute top-3 right-3 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+                className="absolute top-3 right-3 p-1.5 rounded-lg text-gray-300 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 dark:bg-red-900/30 transition-colors cursor-pointer"
                 title="删除此目标"
               >
                 <Trash2 size={16} />

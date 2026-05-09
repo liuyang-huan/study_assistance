@@ -8,7 +8,7 @@ from ..database import get_db, SessionLocal
 from ..models.goal import LearningGoal
 from ..models.roadmap import Roadmap
 from ..models.plan import DailyPlan
-from ..models.question import DailyQuestion
+from ..models.question import DailyQuestion, UserAnswer
 from ..models.journal import JournalEntry
 from ..models.learned import LearnedTopic
 from ..models.content_cache import ContentCache
