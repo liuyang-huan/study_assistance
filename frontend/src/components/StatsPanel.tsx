@@ -64,40 +64,8 @@ export default function StatsPanel({ goalId }: { goalId: number }) {
           extra={`${stats.answered_questions}/${stats.total_questions} 题`} />
       </div>
 
-      {/* 打卡热力图 */}
-      <Heatmap data={heatmap} loading={heatmapLoading} />
-
-      {/* 阶段进度 + 评分趋势 */}
+      {/* 评分趋势 + 学习时长趋势 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* 分阶段进度 */}
-        {stats.phase_progress.length > 0 && (
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-5">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-3">阶段完成度</h3>
-            <div className="space-y-3">
-              {stats.phase_progress.map(p => (
-                <div key={p.phase}>
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className={p.phase === stats.current_phase?.phase ? 'font-semibold text-indigo-600' : 'text-gray-500 dark:text-slate-400'}>
-                      Phase {p.phase}: {p.title}
-                    </span>
-                    <span className="text-gray-400 dark:text-slate-500">{p.completed_days}/{p.total_days}d</span>
-                  </div>
-                  <div className="w-full h-2 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        p.percent >= 100 ? 'bg-green-500' :
-                        p.phase === stats.current_phase?.phase ? 'bg-indigo-500' : 'bg-gray-300'
-                      }`}
-                      style={{ width: `${p.percent}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* 评分趋势 */}
         {stats.score_trend.length > 0 && (
           <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-5">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-3">评分趋势</h3>
@@ -114,50 +82,53 @@ export default function StatsPanel({ goalId }: { goalId: number }) {
             </div>
           </div>
         )}
+
+        {stats.study_trend.length > 0 && stats.study_trend.some(s => s.minutes > 0) && (
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-5">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-3">学习时长趋势（分钟）</h3>
+            <div className="flex items-end gap-1 h-20">
+              {stats.study_trend.map((s, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                  <div
+                    className="w-full bg-green-400 rounded-t"
+                    style={{ height: `${Math.max(4, (s.minutes / minuteMax) * 70)}px` }}
+                  />
+                  <span className="text-[10px] text-gray-400 dark:text-slate-500">{s.date.slice(5)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 学习时长趋势 */}
-      {stats.study_trend.length > 0 && stats.study_trend.some(s => s.minutes > 0) && (
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-3">学习时长趋势（分钟）</h3>
-          <div className="flex items-end gap-1 h-20">
-            {stats.study_trend.map((s, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className="w-full bg-green-400 rounded-t"
-                  style={{ height: `${Math.max(4, (s.minutes / minuteMax) * 70)}px` }}
-                />
-                <span className="text-[10px] text-gray-400 dark:text-slate-500">{s.date.slice(5)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* 打卡热力图 + 知识时间线 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Heatmap data={heatmap} loading={heatmapLoading} />
 
-      {/* 知识时间线 */}
-      {stats.topics_covered.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-3">知识时间线</h3>
-          <div className="space-y-2">
-            {stats.topics_covered.slice(0, 15).map((t, i) => (
-              <div key={i} className="flex items-start gap-3 text-sm">
-                <span className="text-xs text-gray-400 dark:text-slate-500 w-16 shrink-0">{t.date}</span>
-                <span className={`shrink-0 mt-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
-                  t.type === 'question' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'
-                }`}>
-                  {t.type === 'question' ? 'Q' : 'J'}
-                </span>
-                <span className="text-gray-700 dark:text-slate-300 truncate">{t.content}</span>
-                {t.score !== undefined && (
-                  <span className={`text-xs font-semibold ml-auto ${
-                    t.score >= 7 ? 'text-green-600' : t.score >= 4 ? 'text-yellow-600' : 'text-red-600'
-                  }`}>{t.score}/10</span>
-                )}
-              </div>
-            ))}
+        {stats.topics_covered.length > 0 && (
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-5">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-3">知识时间线</h3>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {stats.topics_covered.slice(0, 15).map((t, i) => (
+                <div key={i} className="flex items-start gap-3 text-sm">
+                  <span className="text-xs text-gray-400 dark:text-slate-500 w-16 shrink-0">{t.date}</span>
+                  <span className={`shrink-0 mt-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
+                    t.type === 'question' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'
+                  }`}>
+                    {t.type === 'question' ? 'Q' : 'J'}
+                  </span>
+                  <span className="text-gray-700 dark:text-slate-300 truncate">{t.content}</span>
+                  {t.score !== undefined && (
+                    <span className={`text-xs font-semibold ml-auto ${
+                      t.score >= 7 ? 'text-green-600' : t.score >= 4 ? 'text-yellow-600' : 'text-red-600'
+                    }`}>{t.score}/10</span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
