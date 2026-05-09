@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   getGoal, generateRoadmap, generatePlan, completePlan,
@@ -16,6 +16,32 @@ import {
   Download
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+
+// 学习材料预缓存（模块级，跨渲染保持）
+const materialsCache = new Map<string, any>()
+const pendingPreCache = new Set<string>()  // 防止重复预加载
+
+function cacheKey(goalId: number, day: number) { return `${goalId}_${day}` }
+
+async function preCacheTopic(goalId: number, topicDay: number) {
+  const key = cacheKey(goalId, topicDay)
+  if (materialsCache.has(key) || pendingPreCache.has(key)) return
+  pendingPreCache.add(key)
+  try {
+    const data = await learnTopic(goalId, topicDay)
+    materialsCache.set(key, data)
+  } catch {} finally {
+    pendingPreCache.delete(key)
+  }
+}
+
+function getCachedTopic(goalId: number, topicDay: number) {
+  return materialsCache.get(cacheKey(goalId, topicDay)) || null
+}
+
+function clearCachedTopic(goalId: number, topicDay: number) {
+  materialsCache.delete(cacheKey(goalId, topicDay))
+}
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -177,11 +203,43 @@ export default function GoalDetail() {
     await loadGoal()
   })
 
-  const handleLearnTopic = async (topicDay: number, topicTitle: string) => {
+  const handleLearnTopic = async (topicDay: number, topicTitle: string, useCache = true) => {
     pendingTopicRef.current = { day: topicDay, title: topicTitle }
     setTopicLoading(topicDay)
-    setModalLoading(true)
     setModalError('')
+
+    // 检查缓存
+    const cached = useCache ? getCachedTopic(+id!, topicDay) : null
+    if (cached) {
+      clearCachedTopic(+id!, topicDay)
+      const m = cached.materials
+      setModalLoading(false)
+      setSelectedTask({
+        title: cached.title || topicTitle,
+        duration_min: cached.duration_min || 30,
+        detail: cached.detail || '',
+        materials: m && typeof m === 'object' && (
+          m.summary || m.content || m.example || m.practice ||
+          (m.key_concepts?.length > 0) || (m.learning_objectives?.length > 0) ||
+          (m.examples?.length > 0) || (m.practice_questions?.length > 0)
+        ) ? m : undefined,
+      })
+      setLearnedDays(prev => {
+        const next = new Set(prev)
+        for (let d = 1; d <= topicDay; d++) next.add(d)
+        localStorage.setItem(learnedKey, JSON.stringify([...next]))
+        return next
+      })
+      markTopicsUpTo(+id!, topicDay).catch(() => {})
+      // 预缓存下一个未学知识点（基于即将更新的状态）
+      { const newLearned = new Set(learnedDays); for (let d = 1; d <= topicDay; d++) newLearned.add(d)
+        const nextTopic = flatTopics.find((t: any) => !newLearned.has(t.day))
+        if (nextTopic) preCacheTopic(+id!, nextTopic.day) }
+      setTopicLoading(null)
+      return
+    }
+
+    setModalLoading(true)
     setSelectedTask({
       title: topicTitle,
       duration_min: 30,
@@ -217,6 +275,10 @@ export default function GoalDetail() {
         detail: materials.detail || '',
         materials: m,
       })
+      // 预缓存下一个未学知识点（基于即将更新的状态）
+      { const newLearned = new Set(learnedDays); for (let d = 1; d <= topicDay; d++) newLearned.add(d)
+        const nextTopic = flatTopics.find((t: any) => !newLearned.has(t.day))
+        if (nextTopic) preCacheTopic(+id!, nextTopic.day) }
     } catch (e: any) {
       setModalLoading(false)
       setModalError(e?.response?.data?.detail || e?.message || 'AI 服务响应异常，请稍后重试')
@@ -269,6 +331,21 @@ export default function GoalDetail() {
     }
   }
 
+  const phases = goal?.roadmap?.content?.phases || []
+  const flatTopics = useMemo(() =>
+    phases.flatMap((p: any) => (p.topics || []).map((t: any) => ({
+      ...t, phaseTitle: p.title, phaseNum: p.phase,
+    }))),
+    [phases]
+  )
+
+  // 页面加载后预缓存第一个未学知识点
+  useEffect(() => {
+    if (!learnedLoaded || flatTopics.length === 0 || !id) return
+    const firstUnlearned = flatTopics.find((t: any) => !learnedDays.has(t.day))
+    if (firstUnlearned) preCacheTopic(+id, firstUnlearned.day)
+  }, [learnedLoaded, flatTopics, id])
+
   if (loading) {
     return (
       <div className="space-y-4 animate-fade-in">
@@ -284,8 +361,6 @@ export default function GoalDetail() {
       <p>目标不存在</p>
     </div>
   }
-
-  const phases = goal.roadmap?.content?.phases || []
   const tasks = (planData || goal.today_plan)?.plan_content?.tasks || []
   const planNote = (planData || goal.today_plan)?.plan_content?.note || ''
   const currentPlan = planData || goal.today_plan
@@ -594,16 +669,6 @@ export default function GoalDetail() {
 
       {/* 继续学习 — 按路线顺序无限制学下去 */}
       {isToday && phases.length > 0 && (() => {
-        const allTopics = phases.flatMap((p: any) => ({
-          ...p,
-          phaseTitle: p.title,
-          topics: p.topics || [],
-        }))
-        const flatTopics = phases.flatMap((p: any) => (p.topics || []).map((t: any) => ({
-          ...t,
-          phaseTitle: p.title,
-          phaseNum: p.phase,
-        })))
         // 找到第一个未学过的主题
         const nextTopic = flatTopics.find((t: any) => !learnedDays.has(t.day))
         const totalTopics = flatTopics.length
