@@ -1,15 +1,19 @@
 import json
+import threading
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ..database import get_db
+from ..database import get_db, SessionLocal
 from ..models.goal import LearningGoal
 from ..models.roadmap import Roadmap
 from ..models.plan import DailyPlan
 from ..models.question import DailyQuestion
 from ..models.journal import JournalEntry
 from ..models.learned import LearnedTopic
+from ..models.content_cache import ContentCache
+from ..services.ai_service import chat_json
+from ..services.prompt_templates import generate_topic_materials
 from ..schemas.api import GoalCreate, GoalUpdate, GoalResponse, GoalDetailResponse
 
 router = APIRouter(prefix='/api/goals', tags=['goals'])
@@ -173,4 +177,74 @@ def mark_topics_up_to(goal_id: int, topic_day: int, db: Session = Depends(get_db
         if d not in existing:
             db.add(LearnedTopic(goal_id=goal_id, topic_day=d))
     db.commit()
+
+    # 后台预缓存下一个未学主题
+    threading.Thread(target=_prefetch_next_topic, args=(goal_id,), daemon=True).start()
+
     return {'learned_days': list(range(1, topic_day + 1))}
+
+
+def _prefetch_next_topic(goal_id: int):
+    """后台任务：为下一个未学主题预生成材料并缓存"""
+    db = SessionLocal()
+    try:
+        g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
+        if not g:
+            return
+
+        rm = db.query(Roadmap).filter(
+            Roadmap.goal_id == goal_id, Roadmap.is_active == True
+        ).order_by(Roadmap.version.desc()).first()
+        if not rm:
+            return
+
+        content = json.loads(rm.content) if isinstance(rm.content, str) else rm.content
+        learned = set(
+            row[0] for row in
+            db.query(LearnedTopic.topic_day).filter(LearnedTopic.goal_id == goal_id).all()
+        )
+
+        next_day = None
+        next_title = ''
+        phase_ctx = ''
+        for phase in content.get('phases', []):
+            for topic in phase.get('topics', []):
+                if topic.get('day') not in learned:
+                    next_day = topic.get('day')
+                    next_title = topic.get('title', '')
+                    phase_ctx = f'Phase {phase.get("phase")}: {phase.get("title")}'
+                    break
+            if next_day is not None:
+                break
+
+        if next_day is None:
+            return
+
+        cache_key = f'topic_{next_day}'
+        existing = db.query(ContentCache).filter(
+            ContentCache.goal_id == goal_id,
+            ContentCache.cache_type == 'material',
+            ContentCache.cache_key == cache_key,
+        ).first()
+        if existing:
+            return
+
+        prompt = generate_topic_materials(
+            goal_title=g.title,
+            topic_title=next_title,
+            phase_context=phase_ctx,
+        )
+        result = chat_json([{'role': 'user', 'content': prompt}], timeout=50.0)
+
+        cache_entry = ContentCache(
+            goal_id=goal_id,
+            cache_type='material',
+            cache_key=cache_key,
+            content=json.dumps(result, ensure_ascii=False),
+        )
+        db.add(cache_entry)
+        db.commit()
+    except Exception:
+        pass  # 预缓存失败不影响主流程
+    finally:
+        db.close()

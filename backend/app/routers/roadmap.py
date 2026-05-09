@@ -8,6 +8,7 @@ from ..models.goal import LearningGoal
 from ..models.roadmap import Roadmap
 from ..models.question import DailyQuestion
 from ..models.journal import JournalEntry
+from ..models.content_cache import ContentCache
 from ..schemas.api import RoadmapResponse
 from ..services.ai_service import chat_json
 from ..services.prompt_templates import generate_roadmap as roadmap_prompt, adjust_roadmap, generate_topic_materials
@@ -116,8 +117,32 @@ def learn_topic(goal_id: int, topic_day: int, db: Session = Depends(get_db)):
         topic_title=target_topic.get('title', ''),
         phase_context=phase_context,
     )
+
+    cache_key = f'topic_{topic_day}'
+
+    # 1. 先查缓存
+    cached = db.query(ContentCache).filter(
+        ContentCache.goal_id == goal_id,
+        ContentCache.cache_type == 'material',
+        ContentCache.cache_key == cache_key,
+    ).first()
+    if cached:
+        return json.loads(cached.content)
+
+    # 2. 缓存未命中，调 AI
     try:
         result = chat_json([{'role': 'user', 'content': prompt}], timeout=50.0)
-        return result
     except Exception as e:
         raise HTTPException(status_code=502, detail=f'AI 服务暂时不可用：{str(e)[:100]}')
+
+    # 3. 写入缓存
+    cache_entry = ContentCache(
+        goal_id=goal_id,
+        cache_type='material',
+        cache_key=cache_key,
+        content=json.dumps(result, ensure_ascii=False),
+    )
+    db.add(cache_entry)
+    db.commit()
+
+    return result
