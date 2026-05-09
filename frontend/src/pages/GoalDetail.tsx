@@ -97,6 +97,8 @@ export default function GoalDetail() {
 
   // 选中文字快速提问
   const [selectedText, setSelectedText] = useState('')
+  const selectedTextRef = useRef(selectedText)
+  selectedTextRef.current = selectedText
   const selectionRef = useRef<{ text: string; x: number; y: number } | null>(null)
 
   // 新创建目标时自动生成路线和规划
@@ -406,6 +408,8 @@ export default function GoalDetail() {
       setChatLoading(false)
     }
   }
+  const handleChatSendRef = useRef(handleChatSend)
+  handleChatSendRef.current = handleChatSend
 
   const handleContentMouseUp = () => {
     const sel = window.getSelection()
@@ -426,18 +430,26 @@ export default function GoalDetail() {
     setSelectedText('')
     selectionRef.current = null
   }
+  const dismissSelectionRef = useRef(dismissSelection)
+  dismissSelectionRef.current = dismissSelection
 
-  const handleQuestionsKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && selectedText) {
-      e.preventDefault()
-      const query = `我在学习中看到这段话，不太理解，请帮我详细解释一下：\n\n> ${selectedText}`
-      handleChatSend(query)
-      dismissSelection()
+  // 全局键盘监听：选中文字时 Enter 提问，Esc 取消
+  useEffect(() => {
+    if (!selectedText) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        const query = `我在学习中看到这段话，不太理解，请帮我详细解释一下：\n\n> ${selectedTextRef.current || selectedText}`
+        handleChatSendRef.current(query)
+        dismissSelectionRef.current()
+      }
+      if (e.key === 'Escape') {
+        dismissSelectionRef.current()
+      }
     }
-    if (e.key === 'Escape' && selectedText) {
-      dismissSelection()
-    }
-  }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [selectedText])
 
   const handleSaveJournal = async () => {
     if (!journalContent.trim() && !journalReflection.trim()) return
@@ -669,7 +681,7 @@ export default function GoalDetail() {
           </div>
           <div className="flex gap-5 flex-col lg:flex-row">
             {/* 左侧：问题列表 */}
-            <div className="flex-1 min-w-0" onMouseUp={handleContentMouseUp} onKeyDown={handleQuestionsKeyDown}>
+            <div className="flex-1 min-w-0 outline-none" tabIndex={-1} onMouseUp={handleContentMouseUp} onKeyDown={handleQuestionsKeyDown}>
               {questions.length === 0 ? (
                 <div className="text-center py-8">
                   <MessageCircle size={36} className="mx-auto mb-2 text-gray-200" />
