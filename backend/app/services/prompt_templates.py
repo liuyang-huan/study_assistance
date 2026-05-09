@@ -158,3 +158,36 @@ def adjust_roadmap(current_roadmap: str, goal_title: str, progress_summary: str,
 
 返回完整的学习路线 JSON（包含所有阶段，结构不变）：
 {{"phases": [...]}}"""
+
+
+def generate_concept_map(goal_title: str, roadmap_json: str) -> str:
+    return f"""你是一个知识体系构建专家。用户正在学习「{goal_title}」，以下是完整的学习路线：
+
+{roadmap_json}
+
+请为路线中的每个 topic（按 day 编号）提取最核心的概念节点，并找出概念之间的依赖关系。
+
+要求：
+- 每个 topic 提取 2-4 个核心概念（真正重要的，不是简单罗列所有术语）
+- 每个概念给一句简短的解释（15字以内）
+- 标出概念间的依赖关系（A 依赖 B 意味着必须先理解 B 才能理解 A）
+- 依赖关系可以跨 topic、跨阶段
+
+返回 JSON：
+{{
+  "concepts": [
+    {{"id": "c_1", "label": "变量", "topic_day": 1, "summary": "存储数据的基本单元"}},
+    {{"id": "c_2", "label": "数据类型", "topic_day": 1, "summary": "整数、字符串等数据分类"}},
+    {{"id": "c_3", "label": "函数", "topic_day": 2, "summary": "封装可复用代码块"}},
+    ...
+  ],
+  "dependencies": [
+    {{"from": "c_3", "to": "c_1"}},
+    ...
+  ]
+}}
+
+注意：
+- id 使用 "c_N" 格式，从 c_1 开始递增
+- dependencies 中 from 依赖 to，即必须先学 to 才能学 from
+- 只标注真正重要的依赖关系，不要过度关联"""

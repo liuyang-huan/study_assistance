@@ -1,6 +1,6 @@
 import json
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -11,6 +11,9 @@ from ..models.journal import JournalEntry
 from ..models.plan import DailyPlan
 from ..models.question import DailyQuestion, UserAnswer
 from ..models.learned import LearnedTopic
+from ..models.content_cache import ContentCache
+from ..services.ai_service import chat_json
+from ..services.prompt_templates import generate_concept_map
 
 router = APIRouter(prefix='/api/goals/{goal_id}', tags=['stats'])
 
@@ -225,7 +228,7 @@ def get_heatmap(goal_id: int, db: Session = Depends(get_db)):
 
 @router.get('/knowledge-graph')
 def knowledge_graph(goal_id: int, db: Session = Depends(get_db)):
-    """返回知识图谱数据：根节点(目标) + 阶段 + 主题 + 边"""
+    """返回知识图谱数据：根节点(目标) + 阶段 + 主题 + 概念 + 边"""
     g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
     if not g:
         return {'nodes': [], 'edges': []}
@@ -252,6 +255,24 @@ def knowledge_graph(goal_id: int, db: Session = Depends(get_db)):
     scores = [a.score for a in answers if a.score is not None]
     avg_score = round(sum(scores) / len(scores), 1) if scores else None
 
+    # 尝试加载缓存的概念图
+    concept_cache = db.query(ContentCache).filter(
+        ContentCache.goal_id == goal_id,
+        ContentCache.cache_type == 'concept_map',
+    ).order_by(ContentCache.created_at.desc()).first()
+
+    concepts = []
+    concept_deps = []
+    has_concepts = False
+    if concept_cache:
+        try:
+            cm = json.loads(concept_cache.content) if isinstance(concept_cache.content, str) else concept_cache.content
+            concepts = cm.get('concepts', [])
+            concept_deps = cm.get('dependencies', [])
+            has_concepts = True
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     nodes = []
     edges = []
 
@@ -265,7 +286,7 @@ def knowledge_graph(goal_id: int, db: Session = Depends(get_db)):
         'score': avg_score,
     })
 
-    all_topics = []  # 按顺序收集所有 topic
+    all_topics = []
     prev_topic_id = None
 
     for phase in phases:
@@ -275,7 +296,6 @@ def knowledge_graph(goal_id: int, db: Session = Depends(get_db)):
         phase_days = phase.get('duration_days', 0)
         topics = phase.get('topics', [])
 
-        # 计算阶段状态
         topic_days_in_phase = [t.get('day') for t in topics]
         learned_in_phase = len([d for d in topic_days_in_phase if d in learned_days])
         if learned_in_phase == len(topic_days_in_phase) and len(topic_days_in_phase) > 0:
@@ -293,7 +313,6 @@ def knowledge_graph(goal_id: int, db: Session = Depends(get_db)):
             'status': phase_status,
         })
 
-        # 根 → 阶段
         edges.append({'source': 'root', 'target': phase_id})
 
         for topic in topics:
@@ -301,13 +320,11 @@ def knowledge_graph(goal_id: int, db: Session = Depends(get_db)):
             topic_id = f'topic_{topic_day}'
             topic_title = topic.get('title', '')
 
-            # 精确判断状态
             if topic_day in learned_days:
                 topic_status = 'completed'
             elif not learned_days or min(learned_days, default=0) >= topic_day:
-                # 还没学到这个 day：如果前面的都学完了且这个是下一个 → in_progress
                 all_learned = set(learned_days)
-                prev_days = [t.get('day') for t in all_topics[-3:]]  # 前面几个 topic
+                prev_days = [t.get('day') for t in all_topics[-3:]]
                 is_next = topic_day == min(
                     (d for d in topic_days_in_phase if d not in all_learned),
                     default=None
@@ -316,23 +333,90 @@ def knowledge_graph(goal_id: int, db: Session = Depends(get_db)):
             else:
                 topic_status = 'pending'
 
+            # 统计该 topic 下的概念数
+            topic_concepts = [c for c in concepts if c.get('topic_day') == topic_day]
+            concept_count = len(topic_concepts)
+
             nodes.append({
                 'id': topic_id,
                 'label': topic_title,
                 'type': 'topic',
-                'subtitle': f'Day {topic_day}',
+                'subtitle': f'Day {topic_day}' + (f' · {concept_count}个概念' if concept_count else ''),
                 'status': topic_status,
                 'score': avg_score,
+                'concept_count': concept_count,
             })
 
             all_topics.append(topic)
 
-            # 边：阶段 → 主题
             edges.append({'source': phase_id, 'target': topic_id})
 
-            # 边：主题 → 下一个主题（顺序，包括跨阶段）
             if prev_topic_id:
                 edges.append({'source': prev_topic_id, 'target': topic_id})
             prev_topic_id = topic_id
 
-    return {'nodes': nodes, 'edges': edges}
+            # 概念节点和边（如果有）
+            for c in topic_concepts:
+                concept_id = c['id']
+                nodes.append({
+                    'id': concept_id,
+                    'label': c['label'],
+                    'type': 'concept',
+                    'subtitle': c.get('summary', ''),
+                    'status': topic_status,
+                    'topic_day': topic_day,
+                })
+                edges.append({'source': topic_id, 'target': concept_id})
+
+    # 概念间依赖边
+    for dep in concept_deps:
+        edges.append({'source': dep['from'], 'target': dep['to'], 'dependency': True})
+
+    return {'nodes': nodes, 'edges': edges, 'has_concepts': has_concepts}
+
+
+@router.post('/knowledge-graph/generate-concepts')
+def generate_concepts(goal_id: int, db: Session = Depends(get_db)):
+    """调用 AI 为路线中每个 topic 提取核心概念和依赖关系"""
+    g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
+    if not g:
+        raise HTTPException(status_code=404, detail='目标不存在')
+
+    rm = db.query(Roadmap).filter(
+        Roadmap.goal_id == goal_id, Roadmap.is_active == True
+    ).order_by(Roadmap.version.desc()).first()
+    if not rm:
+        raise HTTPException(status_code=404, detail='暂无学习路线')
+
+    content = json.loads(rm.content) if isinstance(rm.content, str) else rm.content
+
+    # 精简路线数据给 AI，只保留结构和标题
+    slim_phases = []
+    for p in content.get('phases', []):
+        slim_phases.append({
+            'phase': p.get('phase'),
+            'title': p.get('title', ''),
+            'topics': [{'day': t.get('day'), 'title': t.get('title', '')}
+                        for t in p.get('topics', [])],
+        })
+
+    prompt = generate_concept_map(g.title, json.dumps({'phases': slim_phases}, ensure_ascii=False))
+    result = chat_json([{'role': 'user', 'content': prompt}], timeout=60.0)
+
+    # 缓存结果
+    existing = db.query(ContentCache).filter(
+        ContentCache.goal_id == goal_id,
+        ContentCache.cache_type == 'concept_map',
+    ).first()
+    if existing:
+        existing.content = json.dumps(result, ensure_ascii=False)
+    else:
+        db.add(ContentCache(
+            goal_id=goal_id,
+            cache_type='concept_map',
+            cache_key='default',
+            content=json.dumps(result, ensure_ascii=False),
+        ))
+    db.commit()
+
+    return {'concepts': result.get('concepts', []), 'dependencies': result.get('dependencies', [])}

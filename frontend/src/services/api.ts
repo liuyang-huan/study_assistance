@@ -50,7 +50,10 @@ export const getQuestionsHistory = (goalId: number) =>
 
 // 知识图谱
 export const getKnowledgeGraph = (goalId: number) =>
-  http.get<{ nodes: any[]; edges: any[] }>(`/goals/${goalId}/knowledge-graph`).then(r => r.data)
+  http.get<{ nodes: any[]; edges: any[]; has_concepts: boolean }>(`/goals/${goalId}/knowledge-graph`).then(r => r.data)
+
+export const generateConceptMap = (goalId: number) =>
+  http.post<{ concepts: any[]; dependencies: any[] }>(`/goals/${goalId}/knowledge-graph/generate-concepts`).then(r => r.data)
 
 // 内容导出
 export const exportRoadmap = (goalId: number) =>
