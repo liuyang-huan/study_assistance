@@ -100,6 +100,21 @@ class QuestionResponse(BaseModel):
     created_at: datetime
 
 
+# --- 学习进度 ---
+class LearnedTopicResponse(BaseModel):
+    topic_day: int
+    learned_at: datetime
+
+
+class GoalProgressResponse(BaseModel):
+    goal_id: int
+    learned_days: list[int]
+    total_topics: int
+    learned_count: int
+    current_phase: int | None
+    current_day: int | None
+
+
 class AnswerResponse(BaseModel):
     id: int
     question_id: int
