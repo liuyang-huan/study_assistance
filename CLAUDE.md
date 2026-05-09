@@ -60,6 +60,45 @@ cd frontend && npm run build
 
 API 文档自动生成于 `http://localhost:8000/docs`
 
+## 手机端访问（Cloudflare Tunnel）
+
+本地开发时，可通过 Cloudflare Tunnel 将前端暴露到公网，手机浏览器直接访问。
+
+### 前置条件
+- 安装 cloudflared（Windows: `winget install Cloudflare.cloudflared`）
+
+### 启动 Tunnel
+```bash
+# 1. 确保前后端都在运行（localhost:5173 和 localhost:8000）
+
+# 2. 启动 tunnel（Windows，cloudflared 在 winget 安装路径下）
+"C:\Users\<用户名>\AppData\Local\Microsoft\WinGet\Packages\Cloudflare.cloudflared_Microsoft.Winget.Source_8wekyb3d8bbwe\cloudflared.exe" tunnel --url http://localhost:5173
+
+# 3. 终端会输出一个 https://xxx.trycloudflare.com 地址，手机浏览器打开即可
+```
+
+### 关键配置
+
+| 配置项 | 文件 | 说明 |
+|--------|------|------|
+| `allowedHosts: ['.trycloudflare.com']` | `frontend/vite.config.ts` | 允许 tunnel 域名访问，否则 Vite 返回 403 |
+| `baseURL: '/api'` | `frontend/src/services/api.ts` | 相对路径，经 Vite proxy 转发到后端，避免手机端 localhost 指向错误 |
+| `server.proxy.'/api'` → `localhost:8000` | `frontend/vite.config.ts` | Vite 代理 API 请求到后端 |
+
+### PWA 安装
+应用已配置 `vite-plugin-pwa`，手机浏览器打开后可添加到主屏幕：
+- **Android**: Chrome 菜单 → "添加到主屏幕"
+- **iOS**: Safari 分享按钮 → "添加到主屏幕"
+
+PWA 配置在 `frontend/vite.config.ts` 的 `VitePWA` 插件中，包含离线缓存策略：
+- API 请求：NetworkFirst，缓存 50 条，24h 过期
+- 图片资源：CacheFirst，缓存 30 张，30 天过期
+
+### Tunnel 注意事项
+- 免费 Tunnel 无固定域名，每次重启 cloudflared 会生成新的随机 URL
+- Tunnel 进程关闭后 URL 立即失效
+- 仅供开发调试使用，生产环境需部署到服务器
+
 ## 目录结构
 
 ```
@@ -141,8 +180,7 @@ API 文档自动生成于 `http://localhost:8000/docs`
 
 ### 前端 API 连接失败
 - 确认后端 `python run.py` 在运行（`http://localhost:8000/api/health`）
-- 前端 `api.ts` 使用绝对 URL `http://localhost:8000/api` 直连后端，不经过 Vite 代理
-- 如果 Vite 跑到非 5173 端口，需在 `backend/app/main.py` 的 CORS 白名单中添加
+- 前端 `api.ts` 使用相对路径 `/api`，通过 Vite proxy 转发到后端（见 `vite.config.ts` 的 `server.proxy` 配置）
 
 ### AI 路线/规划生成失败
 - 检查 `backend/.env` 中 `DEEPSEEK_API_KEY` 是否有效

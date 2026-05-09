@@ -179,7 +179,7 @@ export default function LearningModal({
   const [notes, setNotes] = useState(() => localStorage.getItem(notesKey) || '')
   const [notesSaved, setNotesSaved] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
-  const [showRightPanel, setShowRightPanel] = useState(true)
+  const [showRightPanel, setShowRightPanel] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // 选中文字快速提问
@@ -655,9 +655,16 @@ export default function LearningModal({
         </div>
       </div>
 
-      {/* 右侧面板 — AI 搭子聊天（默认） */}
+      {/* 右侧面板遮罩（移动端） */}
       {showRightPanel && (
-        <aside className="w-80 bg-white dark:bg-slate-900 border-l border-gray-200 dark:border-slate-700 flex flex-col shrink-0">
+        <div className="fixed inset-0 z-50 bg-black/40 lg:hidden" onClick={() => setShowRightPanel(false)} />
+      )}
+
+      {/* 右侧面板 — AI 搭子聊天 */}
+      <aside className={`bg-white dark:bg-slate-900 border-l border-gray-200 dark:border-slate-700 flex flex-col shrink-0 transition-all duration-200
+        fixed lg:static inset-y-0 right-0 z-50 w-80
+        ${showRightPanel ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
+      `}>
           {/* AI 搭子头部 */}
           <div className="p-4 border-b border-gray-100">
             <div className="flex items-center justify-between">
@@ -739,7 +746,7 @@ export default function LearningModal({
                           : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-bl-md'
                       }`}
                     >
-                      <div className="prose prose-xs max-w-none">{<Markdown text={msg.content} /> || msg.content}</div>
+                      {msg.content ? <div className="prose prose-xs max-w-none"><Markdown text={msg.content} /></div> : null}
                     </div>
                     {msg.role === 'user' && (
                       <div className="w-6 h-6 rounded-lg bg-gray-300 flex items-center justify-center shrink-0 mt-0.5">
@@ -785,7 +792,7 @@ export default function LearningModal({
             </div>
           </div>
         </aside>
-      )}
+
       {/* 选中文字浮动提示：按 Enter 询问 AI */}
       {selectedText && selectionRef.current && (
         <div
