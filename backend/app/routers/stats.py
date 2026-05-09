@@ -24,7 +24,7 @@ def get_stats(goal_id: int, db: Session = Depends(get_db)):
     if not g:
         return {}
 
-    # 学习天数（有日志或已完成规划的不同日期数）
+    # 学习天数（日志、已完成规划、已学知识点的不同日期数）
     journal_dates = set(r[0] for r in db.query(JournalEntry.date).filter(
         JournalEntry.goal_id == goal_id
     ).distinct().all())
@@ -33,7 +33,13 @@ def get_stats(goal_id: int, db: Session = Depends(get_db)):
         DailyPlan.goal_id == goal_id, DailyPlan.completed == True
     ).distinct().all())
 
-    all_study_dates = sorted(journal_dates | plan_dates)
+    # 从 LearnedTopic 表提取学习日期
+    learned_rows = db.query(LearnedTopic.learned_at).filter(
+        LearnedTopic.goal_id == goal_id
+    ).all()
+    learned_dates_set_stat = set(r[0].date() if hasattr(r[0], 'date') else r[0] for r in learned_rows)
+
+    all_study_dates = sorted(journal_dates | plan_dates | learned_dates_set_stat)
     total_study_days = len(all_study_dates)
 
     # 今日是否有学习记录
@@ -203,6 +209,17 @@ def get_heatmap(goal_id: int, db: Session = Depends(get_db)):
     ).group_by(DailyQuestion.date).all()
     question_map = {str(r[0]): r[1] for r in q_rows}
 
+    # 每日已学知识点
+    learned_rows_h = db.query(LearnedTopic.learned_at).filter(
+        LearnedTopic.goal_id == goal_id
+    ).all()
+    learned_date_counts: dict[str, int] = {}
+    for r in learned_rows_h:
+        d = r[0].date() if hasattr(r[0], 'date') else r[0]
+        if d >= start_date:
+            ds = str(d)
+            learned_date_counts[ds] = learned_date_counts.get(ds, 0) + 1
+
     # 计算强度等级
     def calc_level(minutes: int, has_activity: bool) -> int:
         if minutes <= 0 and not has_activity: return 0
@@ -218,14 +235,16 @@ def get_heatmap(goal_id: int, db: Session = Depends(get_db)):
         ds = str(d)
         jm = journal_map.get(ds, {'minutes': 0, 'journals': 0})
         minutes = jm['minutes']
-        has_activity = jm['journals'] > 0 or ds in plan_dates or question_map.get(ds, 0) > 0
+        has_activity = jm['journals'] > 0 or ds in plan_dates or question_map.get(ds, 0) > 0 or learned_date_counts.get(ds, 0) > 0
+        learned_count = learned_date_counts.get(ds, 0)
         result.append({
             'date': ds,
-            'level': calc_level(minutes, has_activity),
+            'level': calc_level(minutes, has_activity or learned_count > 0),
             'minutes': minutes,
             'journals': jm['journals'],
             'plan_completed': ds in plan_dates,
             'questions': question_map.get(ds, 0),
+            'learned_topics': learned_count,
         })
 
     return result
