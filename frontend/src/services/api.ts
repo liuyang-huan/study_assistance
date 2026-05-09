@@ -3,6 +3,10 @@ import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQ
 
 const http = axios.create({ baseURL: '/api', timeout: 90000 })
 
+export function getTeachingStyle(): string {
+  return localStorage.getItem('teaching_style') || ''
+}
+
 // 学习目标
 export const getGoals = () => http.get<LearningGoal[]>('/goals').then(r => r.data)
 export const getGoal = (id: number) => http.get<GoalDetail>(`/goals/${id}`).then(r => r.data)
@@ -15,16 +19,16 @@ export const deleteGoal = (id: number) => http.delete(`/goals/${id}`)
 // 学习路线
 export const getRoadmap = (goalId: number) =>
   http.get<Roadmap>(`/goals/${goalId}/roadmap`).then(r => r.data)
-export const generateRoadmap = (goalId: number) =>
-  http.post<Roadmap>(`/goals/${goalId}/roadmap/generate`).then(r => r.data)
-export const learnTopic = (goalId: number, topicDay: number) =>
-  http.post(`/goals/${goalId}/roadmap/learn/${topicDay}`).then(r => r.data)
+export const generateRoadmap = (goalId: number, teachingStyle: string = '') =>
+  http.post<Roadmap>(`/goals/${goalId}/roadmap/generate`, null, { params: { teaching_style: teachingStyle || getTeachingStyle() } }).then(r => r.data)
+export const learnTopic = (goalId: number, topicDay: number, teachingStyle: string = '') =>
+  http.post(`/goals/${goalId}/roadmap/learn/${topicDay}`, null, { params: { teaching_style: teachingStyle || getTeachingStyle() } }).then(r => r.data)
 
 // 每日规划
 export const getPlans = (goalId: number, date?: string) =>
   http.get<DailyPlan>(`/goals/${goalId}/plans`, { params: { date } }).then(r => r.data)
-export const generatePlan = (goalId: number) =>
-  http.post<DailyPlan>(`/goals/${goalId}/plans/generate`).then(r => r.data)
+export const generatePlan = (goalId: number, teachingStyle: string = '') =>
+  http.post<DailyPlan>(`/goals/${goalId}/plans/generate`, null, { params: { teaching_style: teachingStyle || getTeachingStyle() } }).then(r => r.data)
 export const completePlan = (planId: number) =>
   http.put(`/plans/${planId}/complete`).then(r => r.data)
 
@@ -39,10 +43,10 @@ export const getJournalHistory = (goalId: number) =>
 // 每日问答
 export const getQuestions = (goalId: number, date?: string) =>
   http.get<DailyQuestion[]>(`/goals/${goalId}/questions`, { params: { date } }).then(r => r.data)
-export const generateQuestions = (goalId: number) =>
-  http.post<DailyQuestion[]>(`/goals/${goalId}/questions/generate`).then(r => r.data)
-export const submitAnswer = (questionId: number, answer: string) =>
-  http.post(`/questions/${questionId}/answer`, { answer }).then(r => r.data)
+export const generateQuestions = (goalId: number, teachingStyle: string = '') =>
+  http.post<DailyQuestion[]>(`/goals/${goalId}/questions/generate`, null, { params: { teaching_style: teachingStyle || getTeachingStyle() } }).then(r => r.data)
+export const submitAnswer = (questionId: number, answer: string, teachingStyle: string = '') =>
+  http.post(`/questions/${questionId}/answer`, { answer }, { params: { teaching_style: teachingStyle || getTeachingStyle() } }).then(r => r.data)
 
 // 问答历史
 export const getQuestionsHistory = (goalId: number) =>
@@ -66,8 +70,8 @@ export const exportAll = (goalId: number) =>
   http.get(`/goals/${goalId}/export/all`, { responseType: 'blob' }).then(r => r.data)
 
 // AI 学习搭子
-export const chatWithBuddy = (goalId: number, data: { message: string; context: string; chat_history: { role: string; content: string }[] }) =>
-  http.post<{ reply: string }>(`/goals/${goalId}/chat`, data).then(r => r.data)
+export const chatWithBuddy = (goalId: number, data: { message: string; context: string; chat_history: { role: string; content: string }[]; teaching_style?: string }) =>
+  http.post<{ reply: string }>(`/goals/${goalId}/chat`, { ...data, teaching_style: data.teaching_style || getTeachingStyle() }).then(r => r.data)
 
 export function downloadBlob(data: Blob, filename: string) {
   const url = URL.createObjectURL(data)

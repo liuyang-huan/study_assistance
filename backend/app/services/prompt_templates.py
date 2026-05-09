@@ -1,10 +1,23 @@
 from datetime import date
 
 
-def generate_roadmap(goal_title: str, goal_description: str, skill_level: str = '') -> str:
+def _style_instruction(style: str = '') -> str:
+    """根据用户偏好的教学风格生成指令"""
+    if not style or style == 'default':
+        return ''
+    styles = {
+        'analogy': '【教学风格要求】请多用生活中的类比和比喻来解释概念，让抽象的知识变得具体可感，像给朋友聊天一样自然。',
+        'feynman': '【教学风格要求】请用费曼学习法：用最简单直白的语言解释，假装听者是零基础的小白，避免任何术语堆砌，每个概念都用"说白了就是..."的方式讲清楚。',
+        'rigorous': '【教学风格要求】请用学术严谨的风格，注重概念的精确性和知识体系的完整性，给出权威的参考来源。逻辑推导要严密。',
+        'code-heavy': '【教学风格要求】请大量使用实际代码示例和动手练习来说明概念，让用户通过写代码来理解知识点，每个概念都配可运行的代码演示。',
+    }
+    return f'\n{styles.get(style, "")}'
+
+
+def generate_roadmap(goal_title: str, goal_description: str, skill_level: str = '', teaching_style: str = '') -> str:
     return f"""你是一个专业的学习规划师。用户想学习：{goal_title}。
 用户描述：{goal_description or '无补充描述'}。
-当前基础：{skill_level or '零基础/未说明'}。
+当前基础：{skill_level or '零基础/未说明'}。{_style_instruction(teaching_style)}
 
 请为这个学习目标生成一份详细的学习路线，按阶段划分。阶段数量根据目标难度合理设定（一般4-8个阶段）。
 每个阶段需要包含：
@@ -20,8 +33,8 @@ def generate_roadmap(goal_title: str, goal_description: str, skill_level: str = 
 
 
 def generate_daily_plan(goal_title: str, roadmap_summary: str, current_phase: str, date_str: str,
-                        recent_journals: str = '', recent_evaluations: str = '') -> str:
-    return f"""用户正在学习：{goal_title}。
+                        recent_journals: str = '', recent_evaluations: str = '', teaching_style: str = '') -> str:
+    return f"""用户正在学习：{goal_title}。{_style_instruction(teaching_style)}
 学习路线概要：{roadmap_summary}
 当前所处阶段：{current_phase}
 目标日期：{date_str}
@@ -59,7 +72,8 @@ def generate_daily_plan(goal_title: str, roadmap_summary: str, current_phase: st
 def generate_questions(goal_title: str, current_topic: str, difficulty: str = 'medium',
                        learned_topics: list[str] | None = None,
                        review_topics: list[str] | None = None,
-                       previous_questions: list[str] | None = None) -> str:
+                       previous_questions: list[str] | None = None,
+                       teaching_style: str = '') -> str:
     learned_text = ''
     if learned_topics:
         learned_text = '\n用户已学过的知识点：\n' + '\n'.join(f'  - {t}' for t in learned_topics)
@@ -69,7 +83,7 @@ def generate_questions(goal_title: str, current_topic: str, difficulty: str = 'm
     avoid_text = ''
     if previous_questions:
         avoid_text = '\n【重要】以下问题用户已经回答过，请勿重复出题：\n' + '\n'.join(f'  - {q}' for q in previous_questions)
-    return f"""用户正在学习：{goal_title}。
+    return f"""用户正在学习：{goal_title}。{_style_instruction(teaching_style)}
 当前学习主题：{current_topic}。
 难度要求：{difficulty}{learned_text}{review_text}{avoid_text}
 
@@ -100,8 +114,8 @@ def evaluate_answer(goal_title: str, question: str, expected_answer: str, user_a
 {{"score": 8, "correctness": "评估说明", "depth": "理解深度", "suggestion": "学习建议", "need_adjust": false}}"""
 
 
-def generate_topic_materials(goal_title: str, topic_title: str, phase_context: str) -> str:
-    return f"""你是一位资深技术导师。用户正在学习：{goal_title}。
+def generate_topic_materials(goal_title: str, topic_title: str, phase_context: str, teaching_style: str = '') -> str:
+    return f"""你是一位资深技术导师。用户正在学习：{goal_title}。{_style_instruction(teaching_style)}
 当前学习主题：{topic_title}
 所在阶段：{phase_context}
 
@@ -135,8 +149,8 @@ learning_objectives 给 2-3 条。
 }}"""
 
 
-def study_buddy_chat(goal_title: str, task_context: str, chat_history: str, user_message: str) -> str:
-    return f"""你是一个友好的 AI 学习搭子，正在陪用户一起学习。
+def study_buddy_chat(goal_title: str, task_context: str, chat_history: str, user_message: str, teaching_style: str = '') -> str:
+    return f"""你是一个友好的 AI 学习搭子，正在陪用户一起学习。{_style_instruction(teaching_style)}
 
 用户学习目标：{goal_title}
 当前学习内容：{task_context or '未指定具体内容'}
@@ -157,8 +171,8 @@ def study_buddy_chat(goal_title: str, task_context: str, chat_history: str, user
 
 
 def adjust_roadmap(current_roadmap: str, goal_title: str, progress_summary: str,
-                    weak_points: str = '', strengths: str = '') -> str:
-    return f"""用户正在学习：{goal_title}。
+                    weak_points: str = '', strengths: str = '', teaching_style: str = '') -> str:
+    return f"""用户正在学习：{goal_title}。{_style_instruction(teaching_style)}
 当前学习路线：{current_roadmap}
 近期学习情况总结：{progress_summary}
 薄弱环节：{weak_points or '无特别薄弱环节'}

@@ -29,7 +29,7 @@ def _should_adjust(db: Session, goal_id: int, this_need_adjust: bool = False) ->
     return False
 
 
-def _auto_adjust_roadmap(db: Session, goal_id: int, goal_title: str):
+def _auto_adjust_roadmap(db: Session, goal_id: int, goal_title: str, teaching_style: str = ''):
     """自动调整学习路线"""
     # 获取当前路线
     current_rm = db.query(Roadmap).filter(
@@ -57,6 +57,7 @@ def _auto_adjust_roadmap(db: Session, goal_id: int, goal_title: str):
             progress_summary=journal_text,
             weak_points=weak_text,
             strengths='',
+            teaching_style=teaching_style,
         )}], temperature=0.3)
     except Exception:
         return None
@@ -86,7 +87,7 @@ def get_questions(goal_id: int, target_date: str = Query(None, alias='date'), db
 
 
 @router.post('/goals/{goal_id}/questions/generate', response_model=list[QuestionResponse])
-def gen_questions(goal_id: int, db: Session = Depends(get_db)):
+def gen_questions(goal_id: int, teaching_style: str = Query(''), db: Session = Depends(get_db)):
     g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
     if not g:
         raise HTTPException(status_code=404, detail='目标不存在')
@@ -161,6 +162,7 @@ def gen_questions(goal_id: int, db: Session = Depends(get_db)):
             learned_topics=learned_titles[-5:],  # 只传最近 5 个已学
             review_topics=review_topics,
             previous_questions=previous_questions,
+            teaching_style=teaching_style,
         )}])
     except Exception:
         raise HTTPException(status_code=500, detail='AI 生成问题失败')
@@ -184,7 +186,7 @@ def gen_questions(goal_id: int, db: Session = Depends(get_db)):
 
 
 @router.post('/questions/{question_id}/answer', response_model=AnswerResponse)
-def submit_answer(question_id: int, data: AnswerSubmit, db: Session = Depends(get_db)):
+def submit_answer(question_id: int, data: AnswerSubmit, teaching_style: str = Query(''), db: Session = Depends(get_db)):
     q = db.query(DailyQuestion).filter(DailyQuestion.id == question_id).first()
     if not q:
         raise HTTPException(status_code=404, detail='问题不存在')
@@ -214,7 +216,7 @@ def submit_answer(question_id: int, data: AnswerSubmit, db: Session = Depends(ge
     # 自动调整路线
     was_adjusted = False
     if _should_adjust(db, q.goal_id, evaluation.get('need_adjust', False)):
-        _auto_adjust_roadmap(db, q.goal_id, g.title if g else '')
+        _auto_adjust_roadmap(db, q.goal_id, g.title if g else '', teaching_style)
         was_adjusted = True
 
     db.commit()

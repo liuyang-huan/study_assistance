@@ -1,6 +1,6 @@
 import json
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -33,7 +33,7 @@ def get_roadmap(goal_id: int, db: Session = Depends(get_db)):
 
 
 @router.post('/roadmap/generate', response_model=RoadmapResponse)
-def generate_roadmap(goal_id: int, db: Session = Depends(get_db)):
+def generate_roadmap(goal_id: int, teaching_style: str = Query(''), db: Session = Depends(get_db)):
     g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
     if not g:
         raise HTTPException(status_code=404, detail='目标不存在')
@@ -58,11 +58,12 @@ def generate_roadmap(goal_id: int, db: Session = Depends(get_db)):
                 goal_title=g.title,
                 progress_summary=journal_text,
                 weak_points='', strengths='',
+                teaching_style=teaching_style,
             )
         else:
-            prompt = roadmap_prompt(g.title, g.description)
+            prompt = roadmap_prompt(g.title, g.description, teaching_style=teaching_style)
     else:
-        prompt = roadmap_prompt(g.title, g.description)
+        prompt = roadmap_prompt(g.title, g.description, teaching_style=teaching_style)
 
     # 取消旧版本（先提交，释放写锁）
     db.query(Roadmap).filter(Roadmap.goal_id == goal_id).update({'is_active': False})
@@ -82,7 +83,7 @@ def generate_roadmap(goal_id: int, db: Session = Depends(get_db)):
 
 
 @router.post('/roadmap/learn/{topic_day}')
-def learn_topic(goal_id: int, topic_day: int, db: Session = Depends(get_db)):
+def learn_topic(goal_id: int, topic_day: int, teaching_style: str = Query(''), db: Session = Depends(get_db)):
     """为路线中的某个主题生成学习材料，突破每日规划限制"""
     g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
     if not g:
@@ -116,17 +117,20 @@ def learn_topic(goal_id: int, topic_day: int, db: Session = Depends(get_db)):
         goal_title=g.title,
         topic_title=target_topic.get('title', ''),
         phase_context=phase_context,
+        teaching_style=teaching_style,
     )
 
     # 1. 先查缓存（已由预加载机制提前生成）
-    cache_key = f'topic_{topic_day}'
-    cached = db.query(ContentCache).filter(
-        ContentCache.goal_id == goal_id,
-        ContentCache.cache_type == 'material',
-        ContentCache.cache_key == cache_key,
-    ).first()
-    if cached:
-        return json.loads(cached.content)
+    # 非默认教学风格时跳过缓存，确保风格一致性
+    if not teaching_style or teaching_style == 'default':
+        cache_key = f'topic_{topic_day}'
+        cached = db.query(ContentCache).filter(
+            ContentCache.goal_id == goal_id,
+            ContentCache.cache_type == 'material',
+            ContentCache.cache_key == cache_key,
+        ).first()
+        if cached:
+            return json.loads(cached.content)
 
     # 2. 缓存未命中，调 AI
     try:

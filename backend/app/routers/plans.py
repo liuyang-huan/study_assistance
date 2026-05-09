@@ -35,7 +35,7 @@ def get_plans(goal_id: int, target_date: str = Query(None, alias='date'), db: Se
 
 
 @router.post('/goals/{goal_id}/plans/generate', response_model=PlanResponse)
-def gen_plan(goal_id: int, db: Session = Depends(get_db)):
+def gen_plan(goal_id: int, teaching_style: str = Query(''), db: Session = Depends(get_db)):
     g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
     if not g:
         raise HTTPException(status_code=404, detail='目标不存在')
@@ -62,6 +62,7 @@ def gen_plan(goal_id: int, db: Session = Depends(get_db)):
             date_str=str(date.today()),
             recent_journals=journal_text,
             recent_evaluations=q_text,
+            teaching_style=teaching_style,
         )}])
     except Exception:
         raise HTTPException(status_code=500, detail='AI 生成规划失败')

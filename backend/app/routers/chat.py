@@ -13,6 +13,7 @@ class ChatRequest(BaseModel):
     message: str
     context: str = ''
     chat_history: list[dict] = []
+    teaching_style: str = ''
 
 
 @router.post('/{goal_id}/chat')
@@ -29,6 +30,7 @@ def chat_with_buddy(goal_id: int, data: ChatRequest):
         task_context=data.context,
         chat_history=history_str,
         user_message=data.message,
+        teaching_style=data.teaching_style,
     )
 
     reply = chat([{'role': 'user', 'content': prompt}])
@@ -49,6 +51,7 @@ def chat_with_buddy_stream(goal_id: int, data: ChatRequest):
         task_context=data.context,
         chat_history=history_str,
         user_message=data.message,
+        teaching_style=data.teaching_style,
     )
 
     def generate():

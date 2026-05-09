@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   BookOpen, Clock, Lightbulb, Code, PenLine, X, Target,
   Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Save, Loader2, AlertCircle,
-  MessageCircle, Send, Bot, User, Sparkles, Menu
+  MessageCircle, Send, Bot, User, Sparkles, Menu, GitBranch, Layers, LightbulbOff, MessagesSquare
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -130,6 +130,14 @@ const sectionQueries: Record<string, string> = {
   practice: '请帮我解析一下这部分的练习题，给出解题思路',
 }
 
+const deepDivePresets = [
+  { id: 'analogy', icon: Lightbulb, label: '类比', prompt: (t: string) => `请用生活中的类比和比喻来解释下面这段话，让抽象概念变得更容易理解：\n\n> ${t}` },
+  { id: 'principle', icon: GitBranch, label: '原理', prompt: (t: string) => `请从底层原理和设计思路的角度，深入推导和解释下面这段内容，说明"为什么会这样"：\n\n> ${t}` },
+  { id: 'decompose', icon: Layers, label: '拆解', prompt: (t: string) => `请把下面这段内容拆解成更小、更容易理解的子概念，每个子概念用一句话解释，最后总结它们之间的关系：\n\n> ${t}` },
+  { id: 'example', icon: MessagesSquare, label: '举例', prompt: (t: string) => `请用 2-3 个由浅入深的具体例子来说明下面这段内容，每个例子说明场景和要点：\n\n> ${t}` },
+  { id: 'simplify', icon: LightbulbOff, label: '简化', prompt: (t: string) => `请用费曼学习法，用最简单直白的大白话重新解释下面这段内容，假装我完全零基础：\n\n> ${t}` },
+]
+
 export default function LearningModal({
   task,
   goalId,
@@ -214,17 +222,30 @@ export default function LearningModal({
     }
   }
 
-  // 内容区按键：选中文字 + Enter → 快速提问
+  // 内容区按键：选中文字 + Enter → 默认提问
   const handleContentKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey && selectedText) {
       e.preventDefault()
       if (!showRightPanel) setShowRightPanel(true)
       const query = `我在学习中看到这段话，不太理解，请帮我详细解释一下：\n\n> ${selectedText}`
       sendMessage(query)
-      window.getSelection()?.removeAllRanges()
-      setSelectedText('')
-      selectionRef.current = null
+      dismissSelection()
     }
+    if (e.key === 'Escape' && selectedText) {
+      dismissSelection()
+    }
+  }
+
+  const dismissSelection = () => {
+    window.getSelection()?.removeAllRanges()
+    setSelectedText('')
+    selectionRef.current = null
+  }
+
+  const deepDive = (preset: typeof deepDivePresets[number]) => {
+    if (!showRightPanel) setShowRightPanel(true)
+    sendMessage(preset.prompt(selectedText))
+    dismissSelection()
   }
 
   const sendMessage = async (message?: string) => {
@@ -792,18 +813,38 @@ export default function LearningModal({
             </div>
           </div>
         </aside>
-
-      {/* 选中文字浮动提示：按 Enter 询问 AI */}
+      )}
+      {/* 选中文字浮动快捷操作栏 */}
       {selectedText && selectionRef.current && (
-        <div
-          className="fixed z-[100] px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg shadow-lg pointer-events-none animate-bounce"
+        <motion.div
+          initial={{ opacity: 0, y: 4, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          className="fixed z-[100] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl px-1.5 py-1.5 flex items-center gap-0.5"
           style={{
-            left: Math.min(Math.max(selectionRef.current.x - 80, 10), window.innerWidth - 200),
-            top: Math.max(selectionRef.current.y - 36, 10),
+            left: Math.min(Math.max(selectionRef.current.x - 160, 10), window.innerWidth - 340),
+            top: Math.max(selectionRef.current.y - 50, 10),
           }}
         >
-          按 <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px] font-mono">Enter</kbd> 询问 AI 搭子
-        </div>
+          {deepDivePresets.map(p => (
+            <button
+              key={p.id}
+              onClick={() => deepDive(p)}
+              className="flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer transition-colors group"
+              title={p.label}
+            >
+              <p.icon size={15} className="text-gray-500 dark:text-slate-400 group-hover:text-indigo-500 transition-colors" />
+              <span className="text-[10px] text-gray-400 dark:text-slate-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">{p.label}</span>
+            </button>
+          ))}
+          <span className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-0.5" />
+          <button
+            onClick={dismissSelection}
+            className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+          >
+            <X size={13} className="text-gray-400 dark:text-slate-500" />
+            <span className="text-[10px] text-gray-400 dark:text-slate-500">关闭</span>
+          </button>
+        </motion.div>
       )}
     </motion.div>
   )
