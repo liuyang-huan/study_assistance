@@ -10,6 +10,7 @@ from ..models.roadmap import Roadmap
 from ..models.journal import JournalEntry
 from ..models.plan import DailyPlan
 from ..models.question import DailyQuestion, UserAnswer
+from ..models.learned import LearnedTopic
 
 router = APIRouter(prefix='/api/goals/{goal_id}', tags=['stats'])
 
@@ -224,7 +225,7 @@ def get_heatmap(goal_id: int, db: Session = Depends(get_db)):
 
 @router.get('/knowledge-graph')
 def knowledge_graph(goal_id: int, db: Session = Depends(get_db)):
-    """返回知识图谱数据：节点（阶段/主题）和边（关联关系）"""
+    """返回知识图谱数据：根节点(目标) + 阶段 + 主题 + 边"""
     g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
     if not g:
         return {'nodes': [], 'edges': []}
@@ -238,91 +239,100 @@ def knowledge_graph(goal_id: int, db: Session = Depends(get_db)):
     content = json.loads(rm.content) if isinstance(rm.content, str) else rm.content
     phases = content.get('phases', [])
 
-    # 获取学习数据来标记状态
-    journal_dates: set[str] = set()
-    journals = db.query(JournalEntry).filter(JournalEntry.goal_id == goal_id).all()
-    for j in journals:
-        journal_dates.add(str(j.date))
+    # 用 LearnedTopic 精确判断每个 topic 的完成状态
+    learned_days: set[int] = set(
+        row[0] for row in
+        db.query(LearnedTopic.topic_day).filter(LearnedTopic.goal_id == goal_id).all()
+    )
 
-    # 获取问答评分
+    # 获取平均评分
     answers = db.query(UserAnswer).join(DailyQuestion).filter(
         DailyQuestion.goal_id == goal_id
     ).all()
-    avg_score = sum(a.score for a in answers if a.score) / max(len([a for a in answers if a.score]), 1)
+    scores = [a.score for a in answers if a.score is not None]
+    avg_score = round(sum(scores) / len(scores), 1) if scores else None
 
     nodes = []
     edges = []
+
+    # 根节点：学习目标
+    nodes.append({
+        'id': 'root',
+        'label': g.title,
+        'type': 'root',
+        'subtitle': g.description[:50] if g.description else '',
+        'status': 'in_progress' if g.status != 'completed' else 'completed',
+        'score': avg_score,
+    })
+
+    all_topics = []  # 按顺序收集所有 topic
     prev_topic_id = None
 
     for phase in phases:
-        phase_id = f'phase_{phase.get("phase")}'
+        phase_num = phase.get('phase')
+        phase_id = f'phase_{phase_num}'
         phase_title = phase.get('title', '')
         phase_days = phase.get('duration_days', 0)
-
-        # 阶段节点的状态基于其主题完成情况
         topics = phase.get('topics', [])
-        topics_with_data = sum(1 for _ in topics)
-        phase_status = 'pending'
+
+        # 计算阶段状态
+        topic_days_in_phase = [t.get('day') for t in topics]
+        learned_in_phase = len([d for d in topic_days_in_phase if d in learned_days])
+        if learned_in_phase == len(topic_days_in_phase) and len(topic_days_in_phase) > 0:
+            phase_status = 'completed'
+        elif learned_in_phase > 0:
+            phase_status = 'in_progress'
+        else:
+            phase_status = 'pending'
 
         nodes.append({
             'id': phase_id,
             'label': phase_title,
             'type': 'phase',
-            'subtitle': f'{phase_days}天',
+            'subtitle': f'{phase_days}天 · {learned_in_phase}/{len(topic_days_in_phase)}',
             'status': phase_status,
-            'x': None, 'y': None,
         })
 
+        # 根 → 阶段
+        edges.append({'source': 'root', 'target': phase_id})
+
         for topic in topics:
-            topic_id = f'topic_{topic.get("day")}'
+            topic_day = topic.get('day')
+            topic_id = f'topic_{topic_day}'
             topic_title = topic.get('title', '')
 
-            # 判断主题状态：有日志记录的是 completed
-            topic_status = 'pending'
-            if prev_topic_id is None:
-                topic_status = 'in_progress'
+            # 精确判断状态
+            if topic_day in learned_days:
+                topic_status = 'completed'
+            elif not learned_days or min(learned_days, default=0) >= topic_day:
+                # 还没学到这个 day：如果前面的都学完了且这个是下一个 → in_progress
+                all_learned = set(learned_days)
+                prev_days = [t.get('day') for t in all_topics[-3:]]  # 前面几个 topic
+                is_next = topic_day == min(
+                    (d for d in topic_days_in_phase if d not in all_learned),
+                    default=None
+                ) or (not prev_days and topic_day == topic_days_in_phase[0])
+                topic_status = 'in_progress' if is_next else 'pending'
+            else:
+                topic_status = 'pending'
 
             nodes.append({
                 'id': topic_id,
                 'label': topic_title,
                 'type': 'topic',
-                'subtitle': f'Day {topic.get("day")}',
+                'subtitle': f'Day {topic_day}',
                 'status': topic_status,
-                'score': round(avg_score, 1) if avg_score else None,
-                'x': None, 'y': None,
+                'score': avg_score,
             })
+
+            all_topics.append(topic)
 
             # 边：阶段 → 主题
             edges.append({'source': phase_id, 'target': topic_id})
 
-            # 边：主题 → 下一个主题（顺序）
+            # 边：主题 → 下一个主题（顺序，包括跨阶段）
             if prev_topic_id:
                 edges.append({'source': prev_topic_id, 'target': topic_id})
             prev_topic_id = topic_id
-
-        # 更新阶段状态
-        nodes[-1]['status'] = 'completed' if journal_dates else 'pending'
-
-    # 根据日志更新节点状态
-    all_topics = [n for n in nodes if n['type'] == 'topic']
-    studied_count = len(journal_dates)
-    for i, topic_node in enumerate(all_topics):
-        if i < studied_count:
-            topic_node['status'] = 'completed'
-        elif i == studied_count:
-            topic_node['status'] = 'in_progress'
-
-    # 更新阶段状态
-    for node in nodes:
-        if node['type'] == 'phase':
-            phase_topics = [n for n in nodes if n['type'] == 'topic' and any(
-                e['source'] == node['id'] and e['target'] == n['id'] for e in edges
-            )]
-            if phase_topics:
-                statuses = [t['status'] for t in phase_topics]
-                if all(s == 'completed' for s in statuses):
-                    node['status'] = 'completed'
-                elif any(s == 'in_progress' for s in statuses) or any(s == 'completed' for s in statuses):
-                    node['status'] = 'in_progress'
 
     return {'nodes': nodes, 'edges': edges}
