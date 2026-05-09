@@ -845,125 +845,6 @@ export default function GoalDetail() {
         </div>
       </div>
 
-      {/* 每日规划 */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 dark:border-slate-800 shadow-sm p-5 mb-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2">
-            <Calendar size={18} className="text-indigo-500" />
-            {isToday ? '今日规划' : '规划'}
-            {tasks.length > 0 && (
-              <span className="text-[11px] text-gray-400 dark:text-slate-500 font-normal ml-1">点击任务开始学习</span>
-            )}
-          </h2>
-          <div className="flex items-center gap-1">
-            {currentPlan && (
-              <button onClick={() => exportPlan(+id!, planDate).then(b => downloadBlob(b, `学习规划_${planDate}.md`))}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 dark:text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:bg-indigo-900/30 rounded-lg cursor-pointer transition-all">
-                <Download size={12} /> 导出
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => setPlanDate(d => {
-              const dt = new Date(d); dt.setDate(dt.getDate() - 1); return dt.toISOString().slice(0, 10)
-            })} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 dark:bg-slate-800 cursor-pointer transition-colors">
-              <ChevronDown size={16} className="text-gray-400 dark:text-slate-500 rotate-90" />
-            </button>
-            <input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)}
-              className="px-3 py-1.5 text-sm border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 focus:border-indigo-400 outline-none" />
-            <button onClick={() => setPlanDate(d => {
-              const dt = new Date(d); dt.setDate(dt.getDate() + 1); return dt.toISOString().slice(0, 10)
-            })} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 dark:bg-slate-800 cursor-pointer transition-colors">
-              <ChevronDown size={16} className="text-gray-400 dark:text-slate-500 -rotate-90" />
-            </button>
-          </div>
-        </div>
-        {loadingPlan ? (
-          <div className="space-y-2">
-            {[1,2,3].map(i => <div key={i} className="h-12 rounded-xl animate-shimmer" />)}
-          </div>
-        ) : !currentPlan ? (
-          <div className="text-center py-8">
-            <Calendar size={36} className="mx-auto mb-2 text-gray-200" />
-            <p className="text-gray-400 dark:text-slate-500 text-sm mb-4">{fmtDate(planDate)} 暂无规划</p>
-            {isToday && (
-              <button onClick={handleGeneratePlan} disabled={!!actionLoading}
-                className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 text-sm cursor-pointer transition-all shadow-md shadow-indigo-200 font-medium">
-                生成规划
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {tasks.map((t: any, i: number) => (
-              <motion.div
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                key={i}
-                onClick={() => setSelectedTask(t)}
-                className={`flex items-start gap-3 p-3.5 rounded-xl transition-all cursor-pointer group ${
-                  currentPlan?.completed ? 'bg-emerald-50 dark:bg-emerald-900/30/50' :
-                  isToday ? 'bg-gray-50 dark:bg-slate-800 hover:bg-indigo-50 dark:bg-indigo-900/30 hover:shadow-sm' : 'bg-gray-50 dark:bg-slate-800/50'
-                }`}
-              >
-                {isToday && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (isToday && currentPlan) completePlan(currentPlan.id).then(() => { loadGoal(); loadPlan(planDate); setStatsKey(k => k + 1) })
-                    }}
-                    className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all cursor-pointer ${
-                      currentPlan?.completed
-                        ? 'bg-emerald-500 border-emerald-500'
-                        : 'border-gray-300 group-hover:border-indigo-400'
-                    }`}
-                  >
-                    {currentPlan?.completed && <CheckCircle2 size={12} className="text-white" />}
-                  </button>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className={`text-sm font-medium flex items-center gap-2 ${
-                    currentPlan?.completed ? 'text-gray-400 dark:text-slate-500 line-through' : 'text-gray-800 dark:text-slate-200'
-                  }`}>
-                    {t.title}
-                    {t.materials && (
-                      <BookOpen size={12} className="text-indigo-400 shrink-0" />
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400">
-                    <span className="flex items-center gap-0.5"><Clock size={10} /> {t.duration_min}分钟</span>
-                    <span>{t.detail}</span>
-                    {t.materials && <span className="text-indigo-400 group-hover:text-indigo-600 transition-colors">点击开始学习 →</span>}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-            {/* 旧规划没有材料时提示 */}
-            {tasks.length > 0 && !tasks.some((t: any) => t.materials) && isToday && (
-              <div className="mt-3 p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl text-xs text-indigo-600 flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <AlertCircle size={13} />
-                  此规划不含学习材料，重新生成后可点击任务直接学习
-                </span>
-                <button onClick={handleGeneratePlan} disabled={!!actionLoading}
-                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs cursor-pointer font-medium transition-colors shrink-0">
-                  重新生成
-                </button>
-              </div>
-            )}
-            {planNote && (
-              <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/30 rounded-xl text-xs text-amber-700 flex items-start gap-2">
-                <AlertCircle size={13} className="shrink-0 mt-0.5" />
-                {planNote}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <StatsPanel key={statsKey} goalId={+id!} />
-
       {/* 学习路线 */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 dark:border-slate-800 shadow-sm p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
@@ -1086,6 +967,125 @@ export default function GoalDetail() {
                 </div>
               </details>
             ))}
+          </div>
+        )}
+      </div>
+
+      <StatsPanel key={statsKey} goalId={+id!} />
+
+      {/* 每日规划 */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 dark:border-slate-800 shadow-sm p-5 mb-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2">
+            <Calendar size={18} className="text-indigo-500" />
+            {isToday ? '今日规划' : '规划'}
+            {tasks.length > 0 && (
+              <span className="text-[11px] text-gray-400 dark:text-slate-500 font-normal ml-1">点击任务开始学习</span>
+            )}
+          </h2>
+          <div className="flex items-center gap-1">
+            {currentPlan && (
+              <button onClick={() => exportPlan(+id!, planDate).then(b => downloadBlob(b, `学习规划_${planDate}.md`))}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 dark:text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:bg-indigo-900/30 rounded-lg cursor-pointer transition-all">
+                <Download size={12} /> 导出
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setPlanDate(d => {
+              const dt = new Date(d); dt.setDate(dt.getDate() - 1); return dt.toISOString().slice(0, 10)
+            })} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 dark:bg-slate-800 cursor-pointer transition-colors">
+              <ChevronDown size={16} className="text-gray-400 dark:text-slate-500 rotate-90" />
+            </button>
+            <input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)}
+              className="px-3 py-1.5 text-sm border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 focus:border-indigo-400 outline-none" />
+            <button onClick={() => setPlanDate(d => {
+              const dt = new Date(d); dt.setDate(dt.getDate() + 1); return dt.toISOString().slice(0, 10)
+            })} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 dark:bg-slate-800 cursor-pointer transition-colors">
+              <ChevronDown size={16} className="text-gray-400 dark:text-slate-500 -rotate-90" />
+            </button>
+          </div>
+        </div>
+        {loadingPlan ? (
+          <div className="space-y-2">
+            {[1,2,3].map(i => <div key={i} className="h-12 rounded-xl animate-shimmer" />)}
+          </div>
+        ) : !currentPlan ? (
+          <div className="text-center py-8">
+            <Calendar size={36} className="mx-auto mb-2 text-gray-200" />
+            <p className="text-gray-400 dark:text-slate-500 text-sm mb-4">{fmtDate(planDate)} 暂无规划</p>
+            {isToday && (
+              <button onClick={handleGeneratePlan} disabled={!!actionLoading}
+                className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 text-sm cursor-pointer transition-all shadow-md shadow-indigo-200 font-medium">
+                生成规划
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {tasks.map((t: any, i: number) => (
+              <motion.div
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                key={i}
+                onClick={() => setSelectedTask(t)}
+                className={`flex items-start gap-3 p-3.5 rounded-xl transition-all cursor-pointer group ${
+                  currentPlan?.completed ? 'bg-emerald-50 dark:bg-emerald-900/30/50' :
+                  isToday ? 'bg-gray-50 dark:bg-slate-800 hover:bg-indigo-50 dark:bg-indigo-900/30 hover:shadow-sm' : 'bg-gray-50 dark:bg-slate-800/50'
+                }`}
+              >
+                {isToday && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (isToday && currentPlan) completePlan(currentPlan.id).then(() => { loadGoal(); loadPlan(planDate); setStatsKey(k => k + 1) })
+                    }}
+                    className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                      currentPlan?.completed
+                        ? 'bg-emerald-500 border-emerald-500'
+                        : 'border-gray-300 group-hover:border-indigo-400'
+                    }`}
+                  >
+                    {currentPlan?.completed && <CheckCircle2 size={12} className="text-white" />}
+                  </button>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className={`text-sm font-medium flex items-center gap-2 ${
+                    currentPlan?.completed ? 'text-gray-400 dark:text-slate-500 line-through' : 'text-gray-800 dark:text-slate-200'
+                  }`}>
+                    {t.title}
+                    {t.materials && (
+                      <BookOpen size={12} className="text-indigo-400 shrink-0" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400">
+                    <span className="flex items-center gap-0.5"><Clock size={10} /> {t.duration_min}分钟</span>
+                    <span>{t.detail}</span>
+                    {t.materials && <span className="text-indigo-400 group-hover:text-indigo-600 transition-colors">点击开始学习 →</span>}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+            {/* 旧规划没有材料时提示 */}
+            {tasks.length > 0 && !tasks.some((t: any) => t.materials) && isToday && (
+              <div className="mt-3 p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl text-xs text-indigo-600 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <AlertCircle size={13} />
+                  此规划不含学习材料，重新生成后可点击任务直接学习
+                </span>
+                <button onClick={handleGeneratePlan} disabled={!!actionLoading}
+                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs cursor-pointer font-medium transition-colors shrink-0">
+                  重新生成
+                </button>
+              </div>
+            )}
+            {planNote && (
+              <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/30 rounded-xl text-xs text-amber-700 flex items-start gap-2">
+                <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                {planNote}
+              </div>
+            )}
           </div>
         )}
       </div>

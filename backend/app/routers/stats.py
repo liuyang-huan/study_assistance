@@ -78,32 +78,37 @@ def get_stats(goal_id: int, db: Session = Depends(get_db)):
     # 最近7天评分趋势
     recent_scores = score_trend[-7:] if len(score_trend) > 7 else score_trend
 
-    # 阶段进度
+    # 阶段进度 — 基于 LearnedTopic 精确统计
     rm = db.query(Roadmap).filter(
         Roadmap.goal_id == goal_id, Roadmap.is_active == True
     ).order_by(Roadmap.version.desc()).first()
 
+    # 已学知识点（来自 LearnedTopic 表）
+    learned_days_set = set(
+        r[0] for r in db.query(LearnedTopic.topic_day).filter(LearnedTopic.goal_id == goal_id).all()
+    )
+
     phase_progress = []
+    total_topics = 0
+    learned_count = 0
     if rm:
         content = json.loads(rm.content) if isinstance(rm.content, str) else rm.content
-        total_days = 0
-        completed_days = total_study_days
         for phase in content.get('phases', []):
             days = phase.get('duration_days', 0)
-            total_days += days
-            phase_completed = max(0, min(days, completed_days - sum(
-                p.get('completed_days', 0) for p in phase_progress
-            )))
+            topics = phase.get('topics', [])
+            topic_days = [t.get('day') for t in topics]
+            learned_in_phase = len([d for d in topic_days if d in learned_days_set])
+            total_topics += len(topic_days)
+            learned_count += learned_in_phase
             phase_progress.append({
                 'phase': phase.get('phase'),
                 'title': phase.get('title', ''),
                 'total_days': days,
-                'completed_days': phase_completed,
-                'percent': round(phase_completed / days * 100, 1) if days > 0 else 0,
+                'completed_days': learned_in_phase,
+                'percent': round(learned_in_phase / len(topic_days) * 100, 1) if topic_days else 0,
             })
-            completed_days -= phase_completed
 
-        overall_percent = round(min(100, total_study_days / total_days * 100), 1) if total_days > 0 else 0
+        overall_percent = round(learned_count / total_topics * 100, 1) if total_topics > 0 else 0
         current_phase = next((p for p in phase_progress if p['completed_days'] < p['total_days']), phase_progress[-1] if phase_progress else None)
     else:
         overall_percent = 0
