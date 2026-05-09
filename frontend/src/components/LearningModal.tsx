@@ -4,6 +4,7 @@ import {
   Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Save, Loader2, AlertCircle,
   MessageCircle, Send, Bot, User, Sparkles
 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 import { motion, AnimatePresence } from 'framer-motion'
 import { chatWithBuddy } from '../services/api'
 
@@ -52,31 +53,53 @@ function hasMaterialsContent(m: any): boolean {
   )
 }
 
-function renderMarkdown(text: string) {
+function Markdown({ text }: { text?: string }) {
   if (!text || typeof text !== 'string') return null
-
-  let html = text.replace(/\n(\|.+\|)\n\|[-| :]+\|\n((?:\|.+\|\n?)+)/g, (_m: string, header: string, _sep: string, rows: string) => {
-    const hCells = header.split('|').filter(c => c.trim()).map(c => `<th class="px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-800 border-b border-gray-200">${c.trim()}</th>`).join('')
-    const rHtml = rows.trim().split('\n').map((row: string) => {
-      const cells = row.split('|').filter(c => c.trim()).map(c => `<td class="px-3 py-2 text-xs text-gray-600 dark:text-slate-400 border-b border-gray-100">${c.trim()}</td>`).join('')
-      return `<tr>${cells}</tr>`
-    }).join('')
-    return `\n<table class="w-full my-3 border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden"><thead><tr>${hCells}</tr></thead><tbody>${rHtml}</tbody></table>\n`
-  })
-
-  html = html
-    .replace(/### (.+)/g, '<h3 class="text-base font-semibold text-gray-800 dark:text-slate-200 mt-4 mb-2">$1</h3>')
-    .replace(/## (.+)/g, '<h2 class="text-lg font-semibold text-gray-900 dark:text-slate-100 mt-5 mb-2">$1</h2>')
-    .replace(/# (.+)/g, '<h1 class="text-xl font-bold text-gray-900 dark:text-slate-100 mt-5 mb-2">$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-gray-900 dark:text-slate-100">$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded text-xs font-mono">$1</code>')
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="bg-gray-900 text-gray-100 p-4 rounded-xl text-xs overflow-x-auto my-3 font-mono leading-relaxed">$2</pre>')
-    .replace(/^> (.+)/gm, '<blockquote class="border-l-4 border-indigo-300 bg-indigo-50 dark:bg-indigo-900/30/50 pl-4 py-2 my-2 rounded-r-lg text-sm text-gray-700 dark:text-slate-300 italic">$1</blockquote>')
-    .replace(/^- (.+)/gm, '<li class="ml-4 text-sm text-gray-700 dark:text-slate-300 list-disc">$1</li>')
-    .replace(/^(\d+)\. (.+)/gm, '<li class="ml-4 text-sm text-gray-700 dark:text-slate-300 list-decimal">$1. $2</li>')
-    .replace(/\n\n/g, '<br/><br/>')
-  return <div dangerouslySetInnerHTML={{ __html: html }} />
+  return (
+    <ReactMarkdown
+      components={{
+        h1: ({ children }) => <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mt-5 mb-2">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mt-5 mb-2">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-base font-semibold text-gray-800 dark:text-slate-200 mt-4 mb-2">{children}</h3>,
+        h4: ({ children }) => <h4 className="text-sm font-semibold text-gray-800 dark:text-slate-200 mt-3 mb-1.5">{children}</h4>,
+        h5: ({ children }) => <h5 className="text-sm font-medium text-gray-700 dark:text-slate-300 mt-3 mb-1">{children}</h5>,
+        h6: ({ children }) => <h6 className="text-xs font-medium text-gray-600 dark:text-slate-400 mt-2 mb-1">{children}</h6>,
+        p: ({ children }) => <p className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed my-1.5">{children}</p>,
+        strong: ({ children }) => <strong className="font-semibold text-gray-900 dark:text-slate-100">{children}</strong>,
+        em: ({ children }) => <em className="text-gray-600 dark:text-slate-400">{children}</em>,
+        ul: ({ children }) => <ul className="list-disc pl-5 my-2 space-y-0.5">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal pl-5 my-2 space-y-0.5">{children}</ol>,
+        li: ({ children }) => <li className="text-sm text-gray-700 dark:text-slate-300">{children}</li>,
+        code: ({ className, children, ...props }) => {
+          const isBlock = className?.startsWith('language-')
+          if (isBlock) {
+            const lang = className?.replace('language-', '') || ''
+            return (
+              <div className="my-3 rounded-xl overflow-hidden border border-gray-200 dark:border-slate-700">
+                {lang && <div className="text-[10px] text-gray-400 dark:text-slate-500 px-4 py-1 bg-gray-50 dark:bg-slate-800 border-b border-gray-100 dark:border-slate-700">{lang}</div>}
+                <pre className="bg-gray-900 text-gray-100 p-4 text-xs overflow-x-auto font-mono leading-relaxed">
+                  <code>{children}</code>
+                </pre>
+              </div>
+            )
+          }
+          return <code className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded text-xs font-mono" {...props}>{children}</code>
+        },
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-4 border-indigo-300 dark:border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20 pl-4 py-2 my-2 rounded-r-lg text-sm text-gray-700 dark:text-slate-300 italic">{children}</blockquote>
+        ),
+        table: ({ children }) => <div className="overflow-x-auto my-3"><table className="w-full border border-gray-200 dark:border-slate-700 rounded-lg">{children}</table></div>,
+        thead: ({ children }) => <thead className="bg-gray-50 dark:bg-slate-800">{children}</thead>,
+        tbody: ({ children }) => <tbody>{children}</tbody>,
+        th: ({ children }) => <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-slate-300 border-b border-gray-200 dark:border-slate-700">{children}</th>,
+        td: ({ children }) => <td className="px-3 py-2 text-xs text-gray-600 dark:text-slate-400 border-b border-gray-100 dark:border-slate-700">{children}</td>,
+        tr: ({ children }) => <tr>{children}</tr>,
+        a: ({ href, children }) => <a href={href} className="text-indigo-600 dark:text-indigo-400 hover:underline" target="_blank" rel="noopener">{children}</a>,
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  )
 }
 
 function formatTime(seconds: number) {
@@ -519,7 +542,7 @@ export default function LearningModal({
                     </h3>
                     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm p-6 prose prose-sm max-w-none">
                       <div className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed space-y-3">
-                        {renderMarkdown(m.content)}
+                        <Markdown text={m.content} />
                       </div>
                     </div>
                   </section>
@@ -533,7 +556,7 @@ export default function LearningModal({
                     </h3>
                     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm p-6">
                       <div className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed">
-                        {renderMarkdown(m.example)}
+                        <Markdown text={m.example} />
                       </div>
                     </div>
                   </section>
@@ -574,9 +597,9 @@ export default function LearningModal({
                     <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2 mb-4">
                       <PenLine size={16} className="text-indigo-500" /> {sectionLabels.practice}
                     </h3>
-                    <div className="bg-amber-50 dark:bg-amber-900/30 rounded-2xl border border-amber-100 p-6">
+                    <div className="bg-amber-50 dark:bg-amber-900/30 rounded-2xl border border-amber-100 dark:border-amber-800 p-6">
                       <div className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed">
-                        {renderMarkdown(m.practice)}
+                        <Markdown text={m.practice} />
                       </div>
                     </div>
                   </section>
@@ -701,7 +724,7 @@ export default function LearningModal({
                           : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-bl-md'
                       }`}
                     >
-                      <div className="prose prose-xs max-w-none">{renderMarkdown(msg.content) || msg.content}</div>
+                      <div className="prose prose-xs max-w-none">{<Markdown text={msg.content} /> || msg.content}</div>
                     </div>
                     {msg.role === 'user' && (
                       <div className="w-6 h-6 rounded-lg bg-gray-300 flex items-center justify-center shrink-0 mt-0.5">
