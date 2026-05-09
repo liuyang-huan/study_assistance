@@ -95,6 +95,10 @@ export default function GoalDetail() {
   const [chatLoading, setChatLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
+  // 选中文字快速提问
+  const [selectedText, setSelectedText] = useState('')
+  const selectionRef = useRef<{ text: string; x: number; y: number } | null>(null)
+
   // 新创建目标时自动生成路线和规划
   const [autoGenStage, setAutoGenStage] = useState<'idle' | 'roadmap' | 'plan' | 'done' | 'error'>('idle')
   const [autoGenError, setAutoGenError] = useState('')
@@ -360,10 +364,10 @@ export default function GoalDetail() {
     }
   }
 
-  const handleChatSend = async () => {
-    const msg = chatInput.trim()
+  const handleChatSend = async (message?: string) => {
+    const msg = (message || chatInput).trim()
     if (!msg || chatLoading) return
-    setChatInput('')
+    if (!message) setChatInput('')
     const updated = [...chatHistory, { role: 'user', content: msg }]
     setChatHistory(updated)
     setChatLoading(true)
@@ -400,6 +404,38 @@ export default function GoalDetail() {
       setChatHistory([...updated, { role: 'assistant', content: '抱歉，AI 暂时无法响应，请稍后再试。' }])
     } finally {
       setChatLoading(false)
+    }
+  }
+
+  const handleContentMouseUp = () => {
+    const sel = window.getSelection()
+    const text = sel?.toString().trim() || ''
+    if (text && sel?.rangeCount) {
+      const range = sel.getRangeAt(0)
+      const rect = range.getBoundingClientRect()
+      setSelectedText(text)
+      selectionRef.current = { text, x: rect.left + rect.width / 2, y: rect.top - 10 }
+    } else {
+      setSelectedText('')
+      selectionRef.current = null
+    }
+  }
+
+  const dismissSelection = () => {
+    window.getSelection()?.removeAllRanges()
+    setSelectedText('')
+    selectionRef.current = null
+  }
+
+  const handleQuestionsKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey && selectedText) {
+      e.preventDefault()
+      const query = `我在学习中看到这段话，不太理解，请帮我详细解释一下：\n\n> ${selectedText}`
+      handleChatSend(query)
+      dismissSelection()
+    }
+    if (e.key === 'Escape' && selectedText) {
+      dismissSelection()
     }
   }
 
@@ -633,7 +669,7 @@ export default function GoalDetail() {
           </div>
           <div className="flex gap-5 flex-col lg:flex-row">
             {/* 左侧：问题列表 */}
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0" onMouseUp={handleContentMouseUp} onKeyDown={handleQuestionsKeyDown}>
               {questions.length === 0 ? (
                 <div className="text-center py-8">
                   <MessageCircle size={36} className="mx-auto mb-2 text-gray-200" />
@@ -1089,6 +1125,19 @@ export default function GoalDetail() {
           </div>
         )}
       </div>
+
+      {/* 选中文字浮动提示 */}
+      {selectedText && selectionRef.current && (
+        <div
+          className="fixed z-[100] px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg shadow-lg pointer-events-none"
+          style={{
+            left: Math.min(Math.max(selectionRef.current.x - 80, 10), window.innerWidth - 200),
+            top: Math.max(selectionRef.current.y - 36, 10),
+          }}
+        >
+          按 <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px] font-mono">Enter</kbd> 询问 AI 搭子，<kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px] font-mono">Esc</kbd> 取消
+        </div>
+      )}
 
       {/* 学习弹窗 */}
       <AnimatePresence>
