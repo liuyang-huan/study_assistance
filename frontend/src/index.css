@@ -73,6 +73,12 @@ body {
   background-clip: text;
 }
 
+/* 学习内容区文本选中优化 */
+.content-select * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
 /* 自定义滚动条 */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

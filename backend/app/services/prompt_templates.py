@@ -109,9 +109,10 @@ def evaluate_answer(goal_title: str, question: str, expected_answer: str, user_a
 - 理解深度评估
 - 学习建议
 - 是否需要调整学习路线（true/false，如果用户明显没掌握当前内容或明显超前，则建议调整）
+- 满分标准答案：针对这道题，给出一个完整、透彻的满分答案，涵盖所有关键知识点，可作为用户的学习参考
 
 返回 JSON：
-{{"score": 8, "correctness": "评估说明", "depth": "理解深度", "suggestion": "学习建议", "need_adjust": false}}"""
+{{"score": 8, "correctness": "评估说明", "depth": "理解深度", "suggestion": "学习建议", "need_adjust": false, "model_answer": "满分标准答案的完整内容"}}"""
 
 
 def generate_topic_materials(goal_title: str, topic_title: str, phase_context: str, teaching_style: str = '') -> str:
@@ -164,7 +165,7 @@ def study_buddy_chat(goal_title: str, task_context: str, chat_history: str, user
 - 可以给出具体代码示例或学习技巧
 - 适当鼓励用户，保持积极的学习氛围
 - 如果用户问的问题不清晰，友好地请用户澄清
-- 回答简洁精炼，一般不超过300字
+- 回答要透彻深入，把知识点讲清楚讲明白，不要怕长。可以充分展开解释、举例、类比，让用户真正理解。一般不超过3000字
 - 可以适当使用 Markdown 格式（代码块、加粗等）
 
 直接回答用户的问题即可，不要加前缀标签。"""

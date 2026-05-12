@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { getGoals, createGoal, deleteGoal } from '../services/api'
 import type { LearningGoal } from '../types'
 import { Plus, Target, Calendar, Trash2, BookOpen, Sparkles, ChevronRight } from 'lucide-react'
-import { motion } from 'framer-motion'
 
 export default function HomePage() {
   const [goals, setGoals] = useState<LearningGoal[]>([])
@@ -85,9 +84,7 @@ export default function HomePage() {
             <span className="text-sm">创建新的学习目标</span>
           </button>
         ) : (
-          <motion.form
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+          <form
             onSubmit={handleCreate}
             className="p-5 bg-white dark:bg-slate-900 rounded-2xl shadow-lg border border-gray-100"
           >
@@ -130,7 +127,7 @@ export default function HomePage() {
                 取消
               </button>
             </div>
-          </motion.form>
+          </form>
         )}
       </div>
 
@@ -152,11 +149,8 @@ export default function HomePage() {
       ) : (
         <div className="grid gap-3 max-w-lg mx-auto">
           {goals.map((g, i) => (
-            <motion.div
+            <div
               key={g.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
               className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 hover:border-indigo-200 hover:shadow-lg transition-all duration-300"
             >
               <Link to={`/goals/${g.id}`} className="flex items-center gap-4 p-4 no-underline text-inherit">
@@ -193,7 +187,7 @@ export default function HomePage() {
               >
                 <Trash2 size={16} />
               </button>
-            </motion.div>
+            </div>
           ))}
         </div>
       )}

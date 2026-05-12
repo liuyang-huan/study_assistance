@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { getJournalHistory, getQuestionsHistory } from '../services/api'
 import { ArrowLeft, FileText, MessageCircle, Calendar, Clock, Target, Brain } from 'lucide-react'
-import { motion } from 'framer-motion'
 
 export default function HistoryPage() {
   const { id } = useParams<{ id: string }>()
@@ -76,11 +75,8 @@ export default function HistoryPage() {
             </div>
           ) : (
             journals.map((j: any, i: number) => (
-              <motion.div
+              <div
                 key={j.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03 }}
                 className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm p-4 hover:shadow-md transition-all"
               >
                 <div className="flex items-center justify-between mb-3">
@@ -110,7 +106,7 @@ export default function HistoryPage() {
                     <p className="text-sm text-gray-800 dark:text-slate-200 leading-relaxed">{j.reflection}</p>
                   </div>
                 )}
-              </motion.div>
+              </div>
             ))
           )}
         </div>
@@ -126,11 +122,8 @@ export default function HistoryPage() {
             </div>
           ) : (
             questions.map((q: any, i: number) => (
-              <motion.div
+              <div
                 key={q.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03 }}
                 className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm p-4 hover:shadow-md transition-all"
               >
                 <div className="flex items-center justify-between mb-2">
@@ -168,11 +161,17 @@ export default function HistoryPage() {
                         {a.ai_evaluation.suggestion && (
                           <p className="text-xs text-indigo-600 mt-1.5 leading-relaxed">{a.ai_evaluation.suggestion}</p>
                         )}
+                        {a.ai_evaluation.model_answer && (
+                          <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+                            <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1.5">满分答案</p>
+                            <p className="text-xs text-gray-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{a.ai_evaluation.model_answer}</p>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                 ))}
-              </motion.div>
+              </div>
             ))
           )}
         </div>

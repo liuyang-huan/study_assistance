@@ -215,16 +215,7 @@ def _cleanup_and_prefetch(goal_id: int, prefetch_count: int = 2):
             db.query(LearnedTopic.topic_day).filter(LearnedTopic.goal_id == goal_id).all()
         )
 
-        # 1. 删除所有已学主题的缓存
-        if learned:
-            db.query(ContentCache).filter(
-                ContentCache.goal_id == goal_id,
-                ContentCache.cache_type == 'material',
-                ContentCache.cache_key.in_([f'topic_{d}' for d in learned]),
-            ).delete(synchronize_session=False)
-            db.commit()
-
-        # 2. 找到下 N 个未学且未缓存的主题
+        # 1. 找到下 N 个未学且未缓存的主题（保留已学主题缓存，支持重新学习）
         to_prefetch = []
         for phase in content.get('phases', []):
             for topic in phase.get('topics', []):

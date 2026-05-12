@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { getKnowledgeGraph, generateConceptMap } from '../services/api'
 import { Target, GitBranch, Circle, X, ZoomIn, ZoomOut, Maximize2, Sparkles, Loader2 } from 'lucide-react'
-import { motion } from 'framer-motion'
 
 interface GraphNode {
   id: string
@@ -242,10 +241,7 @@ export default function KnowledgeGraph({ goalId, onClose }: { goalId: number; on
   const rootNode = data.nodes.find(n => n.type === 'root')
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+    <div
       className="fixed inset-0 z-50 bg-gray-50 dark:bg-slate-800 flex flex-col select-none"
     >
       <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 px-5 py-3 flex items-center justify-between shrink-0 z-10">
@@ -520,6 +516,6 @@ export default function KnowledgeGraph({ goalId, onClose }: { goalId: number; on
           )}
         </div>
       )}
-    </motion.div>
+    </div>
   )
 }

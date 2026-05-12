@@ -15,7 +15,6 @@ import {
   ChevronDown, ChevronUp, AlertCircle, Play, FileText, Brain, GitBranch,
   Download
 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
 
 // 学习材料预缓存（模块级，跨渲染保持）
 const materialsCache = new Map<string, any>()
@@ -72,7 +71,6 @@ export default function GoalDetail() {
 
   const [journalContent, setJournalContent] = useState('')
   const [journalReflection, setJournalReflection] = useState('')
-  const [journalDuration, setJournalDuration] = useState(0)
   const [savingJournal, setSavingJournal] = useState(false)
   const [journalMsg, setJournalMsg] = useState('')
 
@@ -88,6 +86,58 @@ export default function GoalDetail() {
   const [showGraph, setShowGraph] = useState(false)
   const [topicLoading, setTopicLoading] = useState<number | null>(null)
   const [statsKey, setStatsKey] = useState(0)
+
+  // 页面停留计时（秒），持久化到 localStorage，跨刷新累加
+  const pageTimeKey = `page-time-${id}-${todayStr()}`
+  const pageSecondsRef = useRef(0)
+  const [pageSeconds, setPageSeconds] = useState(() => {
+    try { return parseInt(localStorage.getItem(pageTimeKey) || '0', 10) || 0 } catch { return 0 }
+  })
+  // 跨天重置
+  useEffect(() => {
+    try {
+      const saved = parseInt(localStorage.getItem(pageTimeKey) || '0', 10) || 0
+      pageSecondsRef.current = saved
+      setPageSeconds(saved)
+    } catch { pageSecondsRef.current = 0; setPageSeconds(0) }
+  }, [pageTimeKey])
+
+  useEffect(() => {
+    let lastTick = Date.now()
+    const interval = setInterval(() => {
+      if (document.visibilityState !== 'hidden') {
+        const now = Date.now()
+        const elapsed = Math.round((now - lastTick) / 1000)
+        if (elapsed > 0) {
+          pageSecondsRef.current += elapsed
+          setPageSeconds(pageSecondsRef.current)
+        }
+        lastTick = now
+      } else {
+        lastTick = Date.now()
+      }
+    }, 1000)
+
+    const persist = () => {
+      try { localStorage.setItem(pageTimeKey, String(pageSecondsRef.current)) } catch {}
+    }
+    const visibilityHandler = () => {
+      if (document.visibilityState === 'hidden') {
+        persist()
+      } else {
+        lastTick = Date.now()
+      }
+    }
+    document.addEventListener('visibilitychange', visibilityHandler)
+    window.addEventListener('beforeunload', persist)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', visibilityHandler)
+      window.removeEventListener('beforeunload', persist)
+      persist()
+    }
+  }, [pageTimeKey])
 
   // AI 学习搭子聊天
   const [chatInput, setChatInput] = useState('')
@@ -142,7 +192,6 @@ export default function GoalDetail() {
       if (data.today_journal) {
         setJournalContent(data.today_journal.content || '')
         setJournalReflection(data.today_journal.reflection || '')
-        setJournalDuration(data.today_journal.duration_minutes || 0)
       }
     } catch (e) {
       setError('无法加载目标，请确保后端服务已启动')
@@ -216,6 +265,7 @@ export default function GoalDetail() {
   })
 
   const handleLearnTopic = async (topicDay: number, topicTitle: string, useCache = true) => {
+    console.log('[handleLearnTopic] START', { topicDay, topicTitle, id, learnedDays: [...learnedDays] })
     pendingTopicRef.current = { day: topicDay, title: topicTitle }
     setTopicLoading(topicDay)
     setModalError('')
@@ -224,13 +274,14 @@ export default function GoalDetail() {
     let materials: any
     const cached = useCache ? getCachedTopic(+id!, topicDay) : null
     const pending = useCache ? getPendingPreCache(+id!, topicDay) : null
+    console.log('[handleLearnTopic] cache check', { cached: !!cached, pending: !!pending })
 
     if (cached) {
       clearCachedTopic(+id!, topicDay)
       materials = cached
     } else if (pending) {
       setModalLoading(true)
-      setSelectedTask({ title: topicTitle, duration_min: 30, detail: 'AI 正在生成学习材料...' })
+      setSelectedTask({ title: topicTitle, duration_min: 30, detail: 'AI 正在生成学习材料...', materials: {} })
       try {
         materials = await pending
         if (!materials) throw new Error('preCache failed')
@@ -240,14 +291,14 @@ export default function GoalDetail() {
     }
 
     if (materials) {
-      // 将当前及之前所有天数标记为已学习
+      // 将当前及之前所有天数标记为已学习（仅当之前未学时才同步到后端）
       setLearnedDays(prev => {
         const next = new Set(prev)
         for (let d = 1; d <= topicDay; d++) next.add(d)
         localStorage.setItem(learnedKey, JSON.stringify([...next]))
         return next
       })
-      markTopicsUpTo(+id!, topicDay).catch(() => {})
+      if (!learnedDays.has(topicDay)) markTopicsUpTo(+id!, topicDay).catch(() => {})
       setModalLoading(false)
       setModalError('')
       const m = materials.materials
@@ -268,31 +319,34 @@ export default function GoalDetail() {
         detail: materials.detail || '',
         materials: m,
       })
-      // 预缓存下一个未学知识点
-      { const newLearned = new Set(learnedDays); for (let d = 1; d <= topicDay; d++) newLearned.add(d)
-        const nextTopic = flatTopics.find((t: any) => !newLearned.has(t.day))
-        if (nextTopic) preCacheTopic(+id!, nextTopic.day) }
+      // 预缓存后2个知识点（不管是否已学）
+      { const nextTwo = flatTopics.filter((t: any) => t.day > topicDay).slice(0, 2)
+        nextTwo.forEach((t: any) => preCacheTopic(+id!, t.day)) }
       setTopicLoading(null)
       setStatsKey(k => k + 1)
       return
     }
 
+    console.log('[handleLearnTopic] direct API path, setting loading+selectedTask')
     setModalLoading(true)
     setSelectedTask({
       title: topicTitle,
       duration_min: 30,
       detail: 'AI 正在生成学习材料...',
+      materials: {},
     })
     try {
+      console.log('[handleLearnTopic] calling learnTopic API...')
       materials = await learnTopic(+id!, topicDay)
-      // 将当前及之前所有天数标记为已学习
+      console.log('[handleLearnTopic] API success, got materials:', !!materials, materials?.title)
+      // 将当前及之前所有天数标记为已学习（仅当之前未学时才同步到后端）
       setLearnedDays(prev => {
         const next = new Set(prev)
         for (let d = 1; d <= topicDay; d++) next.add(d)
         localStorage.setItem(learnedKey, JSON.stringify([...next]))
         return next
       })
-      markTopicsUpTo(+id!, topicDay).catch(() => {})
+      if (!learnedDays.has(topicDay)) markTopicsUpTo(+id!, topicDay).catch(() => {})
       setModalLoading(false)
       setModalError('')
       // 验证 AI 返回的材料是否有效（非空对象）
@@ -313,12 +367,12 @@ export default function GoalDetail() {
         detail: materials.detail || '',
         materials: m,
       })
-      // 预缓存下一个未学知识点（基于即将更新的状态）
-      { const newLearned = new Set(learnedDays); for (let d = 1; d <= topicDay; d++) newLearned.add(d)
-        const nextTopic = flatTopics.find((t: any) => !newLearned.has(t.day))
-        if (nextTopic) preCacheTopic(+id!, nextTopic.day) }
+      // 预缓存后2个知识点（不管是否已学）
+      { const nextTwo = flatTopics.filter((t: any) => t.day > topicDay).slice(0, 2)
+        nextTwo.forEach((t: any) => preCacheTopic(+id!, t.day)) }
       setStatsKey(k => k + 1)
     } catch (e: any) {
+      console.error('[handleLearnTopic] API error:', e?.message, e?.response?.status, e?.response?.data)
       setModalLoading(false)
       setModalError(e?.response?.data?.detail || e?.message || 'AI 服务响应异常，请稍后重试')
       // 保留 selectedTask 不清空，弹窗保持打开以显示错误和重试入口
@@ -408,12 +462,10 @@ export default function GoalDetail() {
       setChatLoading(false)
     }
   }
-  const handleChatSendRef = useRef(handleChatSend)
-  handleChatSendRef.current = handleChatSend
 
   const handleContentMouseUp = () => {
     const sel = window.getSelection()
-    const text = sel?.toString().trim() || ''
+    const text = (sel?.toString() || '').replace(/​/g, '').trim()
     if (text && sel?.rangeCount) {
       const range = sel.getRangeAt(0)
       const rect = range.getBoundingClientRect()
@@ -424,6 +476,9 @@ export default function GoalDetail() {
       selectionRef.current = null
     }
   }
+
+  const handleChatSendRef = useRef(handleChatSend)
+  handleChatSendRef.current = handleChatSend
 
   const dismissSelection = () => {
     window.getSelection()?.removeAllRanges()
@@ -456,7 +511,7 @@ export default function GoalDetail() {
     setSavingJournal(true)
     setJournalMsg('')
     try {
-      await saveJournal(+id!, { content: journalContent, reflection: journalReflection, duration_minutes: journalDuration })
+      await saveJournal(+id!, { content: journalContent, reflection: journalReflection, duration_minutes: Math.round(pageSeconds / 60) })
       setJournalMsg('已保存')
       await loadGoal()
     } catch (e) {
@@ -475,11 +530,11 @@ export default function GoalDetail() {
     [phases]
   )
 
-  // 页面加载后预缓存第一个未学知识点
+  // 页面加载后预缓存前2个未学知识点
   useEffect(() => {
     if (!learnedLoaded || flatTopics.length === 0 || !id) return
-    const firstUnlearned = flatTopics.find((t: any) => !learnedDays.has(t.day))
-    if (firstUnlearned) preCacheTopic(+id, firstUnlearned.day)
+    const unlearned = flatTopics.filter((t: any) => !learnedDays.has(t.day)).slice(0, 2)
+    unlearned.forEach((t: any) => preCacheTopic(+id, t.day))
   }, [learnedLoaded, flatTopics, id])
 
   if (loading) {
@@ -552,10 +607,9 @@ export default function GoalDetail() {
       </div>
 
       {error && (
-        <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
-          className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 text-red-600 rounded-xl text-sm border border-red-100 flex items-center gap-2">
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 text-red-600 rounded-xl text-sm border border-red-100 flex items-center gap-2">
           <AlertCircle size={14} /> {error}
-        </motion.div>
+        </div>
       )}
 
       {/* 继续学习 — 按路线顺序无限制学下去 */}
@@ -681,7 +735,7 @@ export default function GoalDetail() {
           </div>
           <div className="flex gap-5 flex-col lg:flex-row">
             {/* 左侧：问题列表 */}
-            <div className="flex-1 min-w-0 outline-none" tabIndex={-1} onMouseUp={handleContentMouseUp} onKeyDown={handleQuestionsKeyDown}>
+            <div className="flex-1 min-w-0 content-select" onMouseUp={handleContentMouseUp}>
               {questions.length === 0 ? (
                 <div className="text-center py-8">
                   <MessageCircle size={36} className="mx-auto mb-2 text-gray-200" />
@@ -697,16 +751,16 @@ export default function GoalDetail() {
                         <div key={q.id} className={`p-4 rounded-xl border transition-all ${
                           eval_ ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-900/30/50' : 'border-indigo-100 bg-indigo-50 dark:bg-indigo-900/30/50'
                         }`}>
-                          <p className="text-sm font-medium text-gray-900 dark:text-slate-100 mb-3 flex items-start gap-2">
-                            <MessageCircle size={14} className="text-indigo-400 mt-0.5 shrink-0" />
+                          <p className="text-sm font-medium text-gray-900 dark:text-slate-100 mb-3">
+                            <MessageCircle size={14} className="text-indigo-400 inline mr-1 align-text-top" />
                             {q.question}
                             {q.type === 'review' && (
-                              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-orange-100 text-orange-600">回顾</span>
+                              <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-orange-100 text-orange-600 ml-1.5 align-middle">回顾</span>
                             )}
                             {q.type === 'new' && (
-                              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-blue-100 text-blue-600">新学</span>
+                              <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-blue-100 text-blue-600 ml-1.5 align-middle">新学</span>
                             )}
-                            <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                            <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded-full font-medium ml-1.5 align-middle ${
                               q.difficulty === 'easy' ? 'bg-emerald-100 text-emerald-600' :
                               q.difficulty === 'hard' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
                             }`}>{q.difficulty}</span>
@@ -728,6 +782,12 @@ export default function GoalDetail() {
                                 )}
                                 {eval_.suggestion && (
                                   <p className="text-xs text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 p-2.5 rounded-lg leading-relaxed">{eval_.suggestion}</p>
+                                )}
+                                {eval_.model_answer && (
+                                  <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+                                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1.5">满分答案</p>
+                                    <p className="text-xs text-gray-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{eval_.model_answer}</p>
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -829,6 +889,13 @@ export default function GoalDetail() {
           <h2 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2">
             <PenLine size={18} className="text-indigo-500" />
             {isToday ? '今日学习心得' : `${fmtDate(planDate)} 记录`}
+            {isToday && (
+              <span className="text-xs font-normal text-gray-400 dark:text-slate-500 ml-1 flex items-center gap-1">
+                <Clock size={12} className="text-emerald-400" />
+                <span className="font-mono tabular-nums text-emerald-600">{Math.floor(pageSeconds / 60)}</span>分钟
+                <span className="font-mono tabular-nums text-gray-300 dark:text-slate-600">{pageSeconds % 60}s</span>
+              </span>
+            )}
           </h2>
           <button onClick={() => exportJournal(+id!).then(b => downloadBlob(b, '学习日志.md'))}
             className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 dark:text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:bg-indigo-900/30 rounded-lg cursor-pointer transition-all">
@@ -846,7 +913,7 @@ export default function GoalDetail() {
               <p className="text-sm text-gray-800 dark:text-slate-200">{goal.today_journal.reflection || '无'}</p>
             </div>
             {goal.today_journal.duration_minutes > 0 && (
-              <p className="text-xs text-gray-400 dark:text-slate-500 flex items-center gap-1"><Clock size={12} /> {goal.today_journal.duration_minutes}分钟</p>
+              <p className="text-xs text-gray-400 dark:text-slate-500 flex items-center gap-1"><Clock size={12} /> 已记录 {goal.today_journal.duration_minutes} 分钟</p>
             )}
           </div>
         ) : isToday ? (
@@ -864,19 +931,19 @@ export default function GoalDetail() {
                 onChange={e => setJournalReflection(e.target.value)} />
             </div>
             <div className="flex items-center gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1.5">学习时长（分钟）</label>
-                <input type="number" min={0} value={journalDuration}
-                  onChange={e => setJournalDuration(+e.target.value || 0)}
-                  className="w-24 px-3 py-2 border border-gray-200 dark:border-slate-700 rounded-xl text-sm focus:border-indigo-400 outline-none" />
+              <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl text-sm">
+                <Clock size={14} className="text-emerald-500" />
+                <span className="text-gray-500 dark:text-slate-400">已学习</span>
+                <span className="font-mono font-semibold text-emerald-600 tabular-nums">{Math.floor(pageSeconds / 60)}</span>
+                <span className="text-gray-500 dark:text-slate-400">分钟</span>
               </div>
               <button onClick={handleSaveJournal}
                 disabled={savingJournal || (!journalContent.trim() && !journalReflection.trim())}
-                className="mt-5 px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 cursor-pointer text-sm transition-all shadow-sm shadow-indigo-200 flex items-center gap-1.5">
+                className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 cursor-pointer text-sm transition-all shadow-sm shadow-indigo-200 flex items-center gap-1.5">
                 {savingJournal ? <><Loader2 size={14} className="animate-spin" /> 保存中...</> : <><CheckCircle2 size={14} /> 保存日志</>}
               </button>
               {journalMsg && (
-                <span className={`mt-5 text-sm flex items-center gap-1 ${journalMsg === '已保存' ? 'text-emerald-600' : 'text-red-600'}`}>
+                <span className={`text-sm flex items-center gap-1 ${journalMsg === '已保存' ? 'text-emerald-600' : 'text-red-600'}`}>
                   {journalMsg === '已保存' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
                   {journalMsg}
                 </span>
@@ -1072,10 +1139,7 @@ export default function GoalDetail() {
         ) : (
           <div className="space-y-2">
             {tasks.map((t: any, i: number) => (
-              <motion.div
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
+              <div
                 key={i}
                 onClick={() => setSelectedTask(t)}
                 className={`flex items-start gap-3 p-3.5 rounded-xl transition-all cursor-pointer group ${
@@ -1113,7 +1177,7 @@ export default function GoalDetail() {
                     {t.materials && <span className="text-indigo-400 group-hover:text-indigo-600 transition-colors">点击开始学习 →</span>}
                   </div>
                 </div>
-              </motion.div>
+              </div>
             ))}
             {/* 旧规划没有材料时提示 */}
             {tasks.length > 0 && !tasks.some((t: any) => t.materials) && isToday && (
@@ -1152,33 +1216,29 @@ export default function GoalDetail() {
       )}
 
       {/* 学习弹窗 */}
-      <AnimatePresence>
-        {selectedTask && (
-          <LearningModal
-            task={selectedTask}
-            goalId={+id!}
-            goalTitle={goal?.title || ''}
-            onClose={() => { setSelectedTask(null); setModalLoading(false); setModalError('') }}
-            onRegenerate={handleGeneratePlan}
-            loading={modalLoading}
-            error={modalError}
-            onRetry={() => {
-              const pt = pendingTopicRef.current
-              if (pt) handleLearnTopic(pt.day, pt.title)
-            }}
-          />
-        )}
-      </AnimatePresence>
+      {selectedTask && (
+        <LearningModal
+          task={selectedTask}
+          goalId={+id!}
+          goalTitle={goal?.title || ''}
+          onClose={() => { setSelectedTask(null); setModalLoading(false); setModalError('') }}
+          onRegenerate={handleGeneratePlan}
+          loading={modalLoading}
+          error={modalError}
+          onRetry={() => {
+            const pt = pendingTopicRef.current
+            if (pt) handleLearnTopic(pt.day, pt.title)
+          }}
+        />
+      )}
 
       {/* 知识图谱 */}
-      <AnimatePresence>
-        {showGraph && (
-          <KnowledgeGraph
-            goalId={+id!}
-            onClose={() => setShowGraph(false)}
-          />
-        )}
-      </AnimatePresence>
+      {showGraph && (
+        <KnowledgeGraph
+          goalId={+id!}
+          onClose={() => setShowGraph(false)}
+        />
+      )}
     </div>
   )
 }

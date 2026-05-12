@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { BookOpen, Target, ChevronRight, Moon, Sun, Palette, Check } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '../hooks/useTheme'
 import { useTeachingStyle, STYLE_OPTIONS, type TeachingStyle } from '../hooks/useTeachingStyle'
 
@@ -63,9 +62,7 @@ export default function Layout() {
                 <Palette size={16} />
               </button>
               {styleOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                <div
                   className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden z-50"
                 >
                   <div className="p-2">
@@ -89,7 +86,7 @@ export default function Layout() {
                       </button>
                     ))}
                   </div>
-                </motion.div>
+                </div>
               )}
             </div>
           </div>
@@ -98,17 +95,7 @@ export default function Layout() {
 
       {/* 页面内容 + 过渡动画 */}
       <main className="max-w-5xl mx-auto px-5 py-6">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Outlet />
-          </motion.div>
-        </AnimatePresence>
+        <Outlet />
       </main>
     </div>
   )

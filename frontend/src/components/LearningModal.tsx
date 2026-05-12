@@ -5,8 +5,8 @@ import {
   MessageCircle, Send, Bot, User, Sparkles, Menu, GitBranch, Layers, LightbulbOff, MessagesSquare
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { motion, AnimatePresence } from 'framer-motion'
-import { chatWithBuddy } from '../services/api'
+
+
 
 interface KeyConcept {
   name: string
@@ -53,6 +53,24 @@ function hasMaterialsContent(m: any): boolean {
   )
 }
 
+function normalizeParagraphs(text: string): string {
+  const lines = text.replace(/\n{3,}/g, '\n\n').split('\n')
+  const out: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    out.push(lines[i])
+    if (i < lines.length - 1) {
+      const curr = lines[i]
+      const next = lines[i + 1]
+      if (curr.trim() && next.trim() &&
+          !/^\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```|---|\|)/.test(curr) &&
+          !/^\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```|---|\|)/.test(next)) {
+        out.push('')
+      }
+    }
+  }
+  return out.join('\n')
+}
+
 function Markdown({ text }: { text?: string }) {
   if (!text || typeof text !== 'string') return null
   return (
@@ -97,7 +115,7 @@ function Markdown({ text }: { text?: string }) {
         a: ({ href, children }) => <a href={href} className="text-indigo-600 dark:text-indigo-400 hover:underline" target="_blank" rel="noopener">{children}</a>,
       }}
     >
-      {text}
+      {normalizeParagraphs(text)}
     </ReactMarkdown>
   )
 }
@@ -158,7 +176,8 @@ export default function LearningModal({
   onRetry?: () => void
 }) {
   const m = task.materials!
-  if (!m) return null
+  console.log('[LearningModal] render', { hasTask: !!task, loading, error: !!error, hasMaterials: !!m, materialsKeys: m ? Object.keys(m) : 'null' })
+  if (!m) { console.log('[LearningModal] m is falsy, returning null'); return null }
   const [activeSection, setActiveSection] = useState<string>('summary')
 
   // 加载计时
@@ -222,30 +241,10 @@ export default function LearningModal({
     }
   }
 
-  // 内容区按键：选中文字 + Enter → 默认提问
-  const handleContentKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && selectedText) {
-      e.preventDefault()
-      if (!showRightPanel) setShowRightPanel(true)
-      const query = `我在学习中看到这段话，不太理解，请帮我详细解释一下：\n\n> ${selectedText}`
-      sendMessage(query)
-      dismissSelection()
-    }
-    if (e.key === 'Escape' && selectedText) {
-      dismissSelection()
-    }
-  }
-
   const dismissSelection = () => {
     window.getSelection()?.removeAllRanges()
     setSelectedText('')
     selectionRef.current = null
-  }
-
-  const deepDive = (preset: typeof deepDivePresets[number]) => {
-    if (!showRightPanel) setShowRightPanel(true)
-    sendMessage(preset.prompt(selectedText))
-    dismissSelection()
   }
 
   const sendMessage = async (message?: string) => {
@@ -255,19 +254,76 @@ export default function LearningModal({
     const updated = [...chatMessages, { role: 'user', content: msg }]
     setChatMessages(updated)
     setChatLoading(true)
+    setChatMessages([...updated, { role: 'assistant', content: '' }])
     try {
-      const res = await chatWithBuddy(goalId, {
-        message: msg,
-        context: buildContext(),
-        chat_history: chatMessages.slice(-20),
+      const resp = await fetch(`/api/goals/${goalId}/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: msg,
+          context: buildContext(),
+          chat_history: chatMessages.slice(-20),
+        }),
       })
-      setChatMessages([...updated, { role: 'assistant', content: res.reply }])
+      const reader = resp.body?.getReader()
+      if (!reader) throw new Error('No stream')
+      const decoder = new TextDecoder()
+      let fullReply = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const text = decoder.decode(value, { stream: true })
+        for (const line of text.split('\n')) {
+          if (line.startsWith('data: ')) {
+            const payload = line.slice(6)
+            if (payload === '[DONE]') break
+            try {
+              const { token } = JSON.parse(payload)
+              fullReply += token
+              setChatMessages([...updated, { role: 'assistant', content: fullReply }])
+            } catch {}
+          }
+        }
+      }
     } catch {
       setChatMessages([...updated, { role: 'assistant', content: '抱歉，AI 搭子暂时不在线，请稍后重试。' }])
     } finally {
       setChatLoading(false)
     }
   }
+
+  const deepDive = (preset: typeof deepDivePresets[number]) => {
+    if (!showRightPanel) setShowRightPanel(true)
+    sendMessage(preset.prompt(selectedText))
+    dismissSelection()
+  }
+
+  const dismissSelectionRef = useRef(dismissSelection)
+  dismissSelectionRef.current = dismissSelection
+
+  const sendMessageRef = useRef(sendMessage)
+  sendMessageRef.current = sendMessage
+  const selectedTextRef = useRef(selectedText)
+  selectedTextRef.current = selectedText
+
+  // 全局键盘监听：选中文字时 Enter 提问，Esc 取消（document 级别，避免 tabIndex 干扰文本选择）
+  useEffect(() => {
+    if (!selectedText) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        if (!showRightPanel) setShowRightPanel(true)
+        const query = `我在学习中看到这段话，不太理解，请帮我详细解释一下：\n\n> ${selectedTextRef.current || selectedText}`
+        sendMessageRef.current(query)
+        dismissSelectionRef.current()
+      }
+      if (e.key === 'Escape') {
+        dismissSelectionRef.current()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [selectedText, showRightPanel])
 
   const askAboutSection = (sectionId: string) => {
     const label = sectionLabels[sectionId] || sectionId
@@ -348,12 +404,7 @@ export default function LearningModal({
   const timerPct = Math.round(timerProgress)
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-gray-100 dark:bg-slate-800 flex"
-    >
+    <div className="fixed inset-0 z-50 bg-gray-100 dark:bg-slate-800 flex animate-[fadeIn_0.2s_ease]">
       {/* 移动端侧边栏遮罩 */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />
@@ -470,7 +521,7 @@ export default function LearningModal({
         </header>
 
         {/* 滚动内容 */}
-        <div ref={contentRef} onScroll={onScroll} onMouseUp={handleContentMouseUp} onKeyDown={handleContentKeyDown} tabIndex={-1} className="flex-1 overflow-y-auto px-8 py-6 outline-none">
+        <div ref={contentRef} onScroll={onScroll} onMouseUp={handleContentMouseUp} className="flex-1 overflow-y-auto px-8 py-6 content-select">
           <div className="max-w-3xl mx-auto space-y-8">
             {!hasMaterialsContent(m) ? (
               loading ? (
@@ -529,8 +580,8 @@ export default function LearningModal({
                     <div className="bg-emerald-50 dark:bg-emerald-900/30 rounded-2xl border border-emerald-100 p-5">
                       <ul className="space-y-2">
                         {m.learning_objectives.map((obj, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-slate-300">
-                            <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-700 flex items-center justify-center shrink-0 text-[10px] font-bold mt-0.5">
+                          <li key={i} className="text-sm text-gray-700 dark:text-slate-300">
+                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-200 text-emerald-700 text-[10px] font-bold mr-2">
                               {i + 1}
                             </span>
                             <span className="leading-relaxed">{obj}</span>
@@ -706,14 +757,8 @@ export default function LearningModal({
           </div>
 
           {/* 笔记区（可折叠） */}
-          <AnimatePresence>
-            {showNotes && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden border-b border-gray-100"
-              >
+          {showNotes && (
+              <div className="overflow-hidden border-b border-gray-100">
                 <div className="p-3">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[11px] font-medium text-gray-500 dark:text-slate-400">学习笔记</span>
@@ -732,9 +777,8 @@ export default function LearningModal({
                     onChange={e => { setNotes(e.target.value); setNotesSaved(false) }}
                   />
                 </div>
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
 
           {/* 聊天消息区 */}
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
@@ -749,10 +793,8 @@ export default function LearningModal({
             ) : (
               <>
                 {chatMessages.map((msg, i) => (
-                  <motion.div
+                  <div
                     key={i}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
                     className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : ''}`}
                   >
                     {msg.role === 'assistant' && (
@@ -774,7 +816,7 @@ export default function LearningModal({
                         <User size={12} className="text-white" />
                       </div>
                     )}
-                  </motion.div>
+                  </div>
                 ))}
                 {chatLoading && (
                   <div className="flex gap-2">
@@ -816,10 +858,7 @@ export default function LearningModal({
 
       {/* 选中文字浮动快捷操作栏 */}
       {selectedText && selectionRef.current && (
-        <motion.div
-          initial={{ opacity: 0, y: 4, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          className="fixed z-[100] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl px-1.5 py-1.5 flex items-center gap-0.5"
+        <div className="fixed z-[100] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl px-1.5 py-1.5 flex items-center gap-0.5"
           style={{
             left: Math.min(Math.max(selectionRef.current.x - 160, 10), window.innerWidth - 340),
             top: Math.max(selectionRef.current.y - 50, 10),
@@ -844,8 +883,8 @@ export default function LearningModal({
             <X size={13} className="text-gray-400 dark:text-slate-500" />
             <span className="text-[10px] text-gray-400 dark:text-slate-500">关闭</span>
           </button>
-        </motion.div>
+        </div>
       )}
-    </motion.div>
+    </div>
   )
 }
