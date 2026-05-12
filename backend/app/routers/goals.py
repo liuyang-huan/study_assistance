@@ -89,6 +89,37 @@ def list_goals(db: Session = Depends(get_db)):
     return [_goal_to_response(g) for g in goals]
 
 
+@router.get('/progress')
+def goals_progress(db: Session = Depends(get_db)):
+    """返回所有活跃目标的进度汇总"""
+    goals = db.query(LearningGoal).filter(LearningGoal.status == 'active').order_by(LearningGoal.updated_at.desc()).all()
+    result = []
+    for g in goals:
+        # 已学 topic 数
+        learned = db.query(LearnedTopic.topic_day).filter(LearnedTopic.goal_id == g.id).all()
+        learned_count = len(learned)
+
+        # 总 topic 数（从路线中获取）
+        total_topics = 0
+        rm = db.query(Roadmap).filter(
+            Roadmap.goal_id == g.id, Roadmap.is_active == True
+        ).order_by(Roadmap.version.desc()).first()
+        if rm:
+            content = json.loads(rm.content) if isinstance(rm.content, str) else rm.content
+            for p in content.get('phases', []):
+                total_topics += len(p.get('topics', []))
+
+        percent = round(learned_count / total_topics * 100) if total_topics > 0 else 0
+        result.append({
+            'goal_id': g.id,
+            'title': g.title,
+            'learned': learned_count,
+            'total': total_topics,
+            'percent': percent,
+        })
+    return result
+
+
 @router.post('', response_model=GoalDetailResponse)
 def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
     g = LearningGoal(title=data.title, description=data.description)

@@ -9,6 +9,7 @@ export function getTeachingStyle(): string {
 
 // 学习目标
 export const getGoals = () => http.get<LearningGoal[]>('/goals').then(r => r.data)
+export const getGoalsProgress = () => http.get<{ goal_id: number; title: string; learned: number; total: number; percent: number }[]>('/goals/progress').then(r => r.data)
 export const getGoal = (id: number) => http.get<GoalDetail>(`/goals/${id}`).then(r => r.data)
 export const createGoal = (data: { title: string; description: string }) =>
   http.post<GoalDetail>('/goals', data).then(r => r.data)

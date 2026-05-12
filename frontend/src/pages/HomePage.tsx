@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getGoals, createGoal, deleteGoal } from '../services/api'
+import { getGoals, createGoal, deleteGoal, getGoalsProgress } from '../services/api'
 import type { LearningGoal } from '../types'
 import { Plus, Target, Calendar, Trash2, BookOpen, Sparkles, ChevronRight } from 'lucide-react'
 
 export default function HomePage() {
   const [goals, setGoals] = useState<LearningGoal[]>([])
+  const [progress, setProgress] = useState<Record<number, { learned: number; total: number; percent: number }>>({})
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [title, setTitle] = useState('')
@@ -16,8 +17,11 @@ export default function HomePage() {
 
   const loadGoals = async () => {
     try {
-      const data = await getGoals()
-      setGoals(data)
+      const [goalsData, progressData] = await Promise.all([getGoals(), getGoalsProgress()])
+      setGoals(goalsData)
+      const map: Record<number, any> = {}
+      progressData.forEach(p => { map[p.goal_id] = { learned: p.learned, total: p.total, percent: p.percent } })
+      setProgress(map)
     } catch (e) {
       console.error('加载目标失败', e)
     } finally {
@@ -177,6 +181,22 @@ export default function HomePage() {
                       {new Date(g.created_at).toLocaleDateString('zh-CN')}
                     </span>
                   </div>
+                  {progress[g.id] && progress[g.id].total > 0 && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-[10px] text-gray-400 dark:text-slate-500">
+                          {progress[g.id].learned}/{progress[g.id].total} 节
+                        </span>
+                        <span className="text-[10px] font-medium text-indigo-500">{progress[g.id].percent}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-indigo-400 to-purple-500 rounded-full transition-all duration-300"
+                          style={{ width: `${progress[g.id].percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <ChevronRight size={18} className="text-gray-300 dark:text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
               </Link>

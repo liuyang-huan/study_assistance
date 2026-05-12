@@ -155,6 +155,7 @@ export default function GoalDetail() {
   const [autoGenStage, setAutoGenStage] = useState<'idle' | 'roadmap' | 'plan' | 'done' | 'error'>('idle')
   const [autoGenError, setAutoGenError] = useState('')
   const autoGenTried = useRef(false)
+  const continueRef = useRef<HTMLDivElement>(null)
 
   // 已学习的主题天数（localStorage 兜底 + 后端持久化）
   const learnedKey = `learned-days-${id}`
@@ -621,7 +622,7 @@ export default function GoalDetail() {
         const progressPct = totalTopics > 0 ? Math.round((learnedCount / totalTopics) * 100) : 0
 
         return (
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 dark:border-slate-800 shadow-sm p-5 mb-5">
+          <div ref={continueRef} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 dark:border-slate-800 shadow-sm p-5 mb-5">
             <h2 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2 mb-4">
               <Play size={18} className="text-emerald-500" />
               继续学习
@@ -1221,7 +1222,7 @@ export default function GoalDetail() {
           task={selectedTask}
           goalId={+id!}
           goalTitle={goal?.title || ''}
-          onClose={() => { setSelectedTask(null); setModalLoading(false); setModalError('') }}
+          onClose={() => { setSelectedTask(null); setModalLoading(false); setModalError(''); setTimeout(() => continueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100) }}
           onRegenerate={handleGeneratePlan}
           loading={modalLoading}
           error={modalError}

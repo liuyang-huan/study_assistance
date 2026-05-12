@@ -70,7 +70,7 @@ def generate_roadmap(goal_id: int, teaching_style: str = Query(''), db: Session 
     db.commit()
 
     # AI 调用（耗时较长，不在事务中持有锁）
-    result = chat_json([{'role': 'user', 'content': prompt}])
+    result = chat_json([{'role': 'user', 'content': prompt}], timeout=120.0)
 
     # 插入新版本
     max_version = db.query(Roadmap).filter(Roadmap.goal_id == goal_id).order_by(Roadmap.version.desc()).first()
