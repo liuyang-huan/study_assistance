@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   BookOpen, Clock, Lightbulb, Code, PenLine, X, Target,
   Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Save, Loader2, AlertCircle,
-  MessageCircle, Send, Bot, User, Sparkles, Menu, GitBranch, Layers, LightbulbOff, MessagesSquare
+  MessageCircle, Send, Bot, User, Sparkles, Menu, GitBranch, Layers, LightbulbOff, MessagesSquare, Minimize2, Maximize2
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 
@@ -207,6 +207,7 @@ export default function LearningModal({
   const [notesSaved, setNotesSaved] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
   const [showRightPanel, setShowRightPanel] = useState(false)
+  const [isChatExpanded, setIsChatExpanded] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // 选中文字快速提问
@@ -218,6 +219,7 @@ export default function LearningModal({
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
 
   const buildContext = () => {
     const parts = [goalTitle]
@@ -251,6 +253,7 @@ export default function LearningModal({
     const msg = (message || chatInput).trim()
     if (!msg || chatLoading) return
     if (!message) setChatInput('')
+    setIsChatExpanded(true)
     const updated = [...chatMessages, { role: 'user', content: msg }]
     setChatMessages(updated)
     setChatLoading(true)
@@ -332,9 +335,15 @@ export default function LearningModal({
     sendMessage(fullQuery)
   }
 
-  // 自动滚动到底部
+  // 自动滚动到底部（仅当用户在底部时才跟随）
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const container = chatContainerRef.current
+    if (container) {
+      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120
+      if (isNearBottom) {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }
+    }
   }, [chatMessages])
 
   // 滚动监听，高亮当前章节
@@ -733,8 +742,9 @@ export default function LearningModal({
       )}
 
       {/* 右侧面板 — AI 搭子聊天 */}
-      <aside className={`bg-white dark:bg-slate-900 border-l border-gray-200 dark:border-slate-700 flex flex-col shrink-0 transition-all duration-200
-        fixed lg:static inset-y-0 right-0 z-50 w-80
+      <aside className={`bg-white dark:bg-slate-900 border-l border-gray-200 dark:border-slate-700 flex flex-col shrink-0 transition-all duration-300
+        fixed lg:static inset-y-0 right-0 z-50
+        ${isChatExpanded ? 'w-[480px]' : 'w-80'}
         ${showRightPanel ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
       `}>
           {/* AI 搭子头部 */}
@@ -749,6 +759,13 @@ export default function LearningModal({
                   showNotes ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200'
                 }`}>
                 <PenLine size={11} /> 笔记
+              </button>
+              <button
+                onClick={() => setIsChatExpanded(!isChatExpanded)}
+                title={isChatExpanded ? '收起面板' : '展开面板'}
+                className="text-[11px] flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-all bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200"
+              >
+                {isChatExpanded ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
               </button>
             </div>
             <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1 leading-relaxed">
@@ -781,7 +798,7 @@ export default function LearningModal({
             )}
 
           {/* 聊天消息区 */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3">
             {chatMessages.length === 0 ? (
               <div className="text-center py-12">
                 <Bot size={40} className="mx-auto mb-3 text-gray-200 dark:text-slate-700" />
