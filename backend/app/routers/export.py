@@ -11,6 +11,7 @@ from ..models.roadmap import Roadmap
 from ..models.plan import DailyPlan
 from ..models.journal import JournalEntry
 from ..models.question import DailyQuestion, UserAnswer
+from ..models.note import UserNote
 
 router = APIRouter(prefix='/api/goals/{goal_id}', tags=['export'])
 
@@ -142,6 +143,32 @@ def export_journal(goal_id: int, db: Session = Depends(get_db)):
     return _download_response(md, f'学习日志_{g.title}.md')
 
 
+@router.get('/export/notes')
+def export_notes(goal_id: int, db: Session = Depends(get_db)):
+    g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
+    if not g:
+        raise HTTPException(404, '目标不存在')
+
+    notes = db.query(UserNote).filter(
+        UserNote.goal_id == goal_id
+    ).order_by(UserNote.updated_at.desc()).all()
+
+    md = f'# 学习笔记：{g.title}\n\n'
+    md += f'> 共 {len(notes)} 条 | 导出于 {date.today()}\n\n'
+    md += '---\n\n'
+
+    if not notes:
+        md += '暂无学习笔记。\n'
+    else:
+        for n in notes:
+            md += f'## {n.topic_title}\n\n'
+            md += f'> 最后更新：{n.updated_at.strftime("%Y-%m-%d %H:%M")}\n\n'
+            md += f'{n.content}\n\n'
+            md += '---\n\n'
+
+    return _download_response(md, f'学习笔记_{g.title}.md')
+
+
 @router.get('/export/all')
 def export_all(goal_id: int, db: Session = Depends(get_db)):
     """导出全部内容：路线 + 最新规划 + 日志"""
@@ -193,5 +220,15 @@ def export_all(goal_id: int, db: Session = Depends(get_db)):
                 md += f'{j.content}\n\n'
             if j.reflection:
                 md += f'> {j.reflection}\n\n'
+
+    # 笔记
+    notes = db.query(UserNote).filter(
+        UserNote.goal_id == goal_id
+    ).order_by(UserNote.updated_at.desc()).all()
+    if notes:
+        md += '## 学习笔记\n\n'
+        for n in notes:
+            md += f'### {n.topic_title}\n\n'
+            md += f'{n.content}\n\n'
 
     return _download_response(md, f'{g.title}_学习档案.md')

@@ -131,3 +131,22 @@ class AnswerResponse(BaseModel):
         if isinstance(v, str) and v:
             return json.loads(v)
         return v
+
+
+# --- 学习笔记 ---
+class NoteCreate(BaseModel):
+    topic_title: str
+    content: str = ''
+
+
+class NoteUpdate(BaseModel):
+    content: str
+
+
+class NoteResponse(BaseModel):
+    id: int
+    goal_id: int
+    topic_title: str
+    content: str
+    created_at: datetime
+    updated_at: datetime

@@ -3,17 +3,19 @@ import { useParams, Link } from 'react-router-dom'
 import {
   getGoal, generateRoadmap, generatePlan, completePlan,
   generateQuestions, submitAnswer, saveJournal, getPlans,
-  exportRoadmap, exportPlan, exportJournal, downloadBlob, learnTopic, getLearnedTopics, markTopicsUpTo,
+  exportRoadmap, exportPlan, exportJournal, exportNotes, downloadBlob, learnTopic, getLearnedTopics, markTopicsUpTo,
+  getNotes, saveNote,
 } from '../services/api'
 import StatsPanel from '../components/StatsPanel'
 import LearningModal from '../components/LearningModal'
 import KnowledgeGraph from '../components/KnowledgeGraph'
-import type { GoalDetail as GoalDetailType } from '../types'
+import { handleImageUpload } from '../utils/imageUpload'
+import type { GoalDetail as GoalDetailType, Note } from '../types'
 import {
   ArrowLeft, Target, RefreshCw, Calendar, Sparkles, CheckCircle2,
   BookOpen, MessageCircle, Clock, Send, Loader2, PenLine,
   ChevronDown, ChevronUp, AlertCircle, Play, FileText, Brain, GitBranch,
-  Download
+  Download, StickyNote, Image
 } from 'lucide-react'
 
 // 学习材料预缓存（模块级，跨渲染保持）
@@ -86,6 +88,39 @@ export default function GoalDetail() {
   const [showGraph, setShowGraph] = useState(false)
   const [topicLoading, setTopicLoading] = useState<number | null>(null)
   const [statsKey, setStatsKey] = useState(0)
+
+  // 笔记本
+  const [notesList, setNotesList] = useState<Note[]>([])
+  const [expandedNoteId, setExpandedNoteId] = useState<number | null>(null)
+  const [editingNoteContent, setEditingNoteContent] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+  const saveNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const loadNotesList = async () => {
+    if (!id) return
+    try { setNotesList(await getNotes(+id)) } catch {}
+  }
+
+  useEffect(() => { loadNotesList() }, [id])
+
+  const autoSaveNoteContent = (noteId: number, content: string) => {
+    setEditingNoteContent(content)
+    if (saveNoteTimer.current) clearTimeout(saveNoteTimer.current)
+    saveNoteTimer.current = setTimeout(async () => {
+      setSavingNote(true)
+      try {
+        const note = notesList.find(n => n.id === noteId)
+        if (!note) return
+        const result = await saveNote(+id!, { topic_title: note.topic_title, content })
+        setNotesList(prev => prev.map(n => n.id === noteId ? result : n))
+      } catch {}
+      setSavingNote(false)
+    }, 1500)
+  }
+
+  useEffect(() => {
+    return () => { if (saveNoteTimer.current) clearTimeout(saveNoteTimer.current) }
+  }, [])
 
   // 页面停留计时（秒），持久化到 localStorage，跨刷新累加
   const pageTimeKey = `page-time-${id}-${todayStr()}`
@@ -961,6 +996,129 @@ export default function GoalDetail() {
         </div>
       </div>
 
+      {/* 学习笔记本 */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm p-5 mb-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2">
+            <StickyNote size={18} className="text-amber-500" />
+            学习笔记本
+            {notesList.length > 0 && (
+              <span className="text-xs text-gray-400 dark:text-slate-500 font-normal">{notesList.length} 条</span>
+            )}
+          </h2>
+          {notesList.length > 0 && (
+            <button onClick={() => exportNotes(+id!).then(b => downloadBlob(b, '学习笔记.md'))}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 dark:text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:bg-indigo-900/30 rounded-lg cursor-pointer transition-all">
+              <Download size={12} /> 导出
+            </button>
+          )}
+        </div>
+        {notesList.length === 0 ? (
+          <div className="text-center py-8">
+            <StickyNote size={40} className="mx-auto mb-3 text-gray-200 dark:text-slate-700" />
+            <p className="text-gray-400 dark:text-slate-500 text-sm">暂无笔记</p>
+            <p className="text-gray-300 dark:text-slate-600 text-xs mt-1">在学习知识点时，点击右侧面板的「笔记」即可记录</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {notesList.map(n => {
+              const isExpanded = expandedNoteId === n.id
+              return (
+                <div key={n.id} className="border border-gray-100 dark:border-slate-800 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => {
+                      if (isExpanded) {
+                        setExpandedNoteId(null)
+                      } else {
+                        setExpandedNoteId(n.id)
+                        setEditingNoteContent(n.content)
+                      }
+                    }}
+                    className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-800 cursor-pointer transition-colors flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-800 dark:text-slate-200 truncate">{n.topic_title}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-xs text-gray-400 dark:text-slate-500 truncate">
+                          {n.content.slice(0, 80)}{n.content.length > 80 ? '...' : ''}
+                        </p>
+                        <span className="text-[10px] text-gray-300 dark:text-slate-600 shrink-0">
+                          {new Date(n.updated_at).toLocaleDateString('zh-CN')}
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronDown size={14} className={`text-gray-300 dark:text-slate-600 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 border-t border-gray-50 dark:border-slate-800">
+                      <div className="flex items-center justify-between mb-2 pt-3">
+                        <span className="text-[10px] text-gray-400 dark:text-slate-500">
+                          编辑于 {new Date(n.updated_at).toLocaleString('zh-CN')}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              const input = document.createElement('input')
+                              input.type = 'file'
+                              input.accept = 'image/*'
+                              input.onchange = () => {
+                                const file = input.files?.[0]
+                                const ta = document.getElementById(`note-ta-${n.id}`) as HTMLTextAreaElement | null
+                                if (file && ta) {
+                                  handleImageUpload(file, ta, (newContent) => autoSaveNoteContent(n.id, newContent))
+                                }
+                                input.remove()
+                              }
+                              input.click()
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                            title="插入图片"
+                          >
+                            <Image size={12} className="text-gray-400 dark:text-slate-500" />
+                          </button>
+                          <span className={`text-[10px] ${savingNote ? 'text-amber-500' : 'text-emerald-500'}`}>
+                            {savingNote ? '保存中...' : '已自动保存'}
+                          </span>
+                        </div>
+                      </div>
+                      <textarea
+                        id={`note-ta-${n.id}`}
+                        className="w-full p-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm resize-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                        rows={6}
+                        value={editingNoteContent}
+                        onChange={e => autoSaveNoteContent(n.id, e.target.value)}
+                        onPaste={e => {
+                          const items = e.clipboardData.items
+                          for (let i = 0; i < items.length; i++) {
+                            if (items[i].type.startsWith('image/')) {
+                              e.preventDefault()
+                              const file = items[i].getAsFile()
+                              if (file) {
+                                handleImageUpload(file, e.currentTarget, (newContent) => autoSaveNoteContent(n.id, newContent))
+                              }
+                              break
+                            }
+                          }
+                        }}
+                        onDrop={e => {
+                          e.preventDefault()
+                          const file = e.dataTransfer.files[0]
+                          if (file && file.type.startsWith('image/')) {
+                            handleImageUpload(file, e.currentTarget, (newContent) => autoSaveNoteContent(n.id, newContent))
+                          }
+                        }}
+                        onDragOver={e => e.preventDefault()}
+                        placeholder="记录你的学习笔记... (支持粘贴/拖拽图片)"
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {/* 学习路线 */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 dark:border-slate-800 shadow-sm p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
@@ -1222,7 +1380,7 @@ export default function GoalDetail() {
           task={selectedTask}
           goalId={+id!}
           goalTitle={goal?.title || ''}
-          onClose={() => { setSelectedTask(null); setModalLoading(false); setModalError(''); setTimeout(() => continueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100) }}
+          onClose={() => { setSelectedTask(null); setModalLoading(false); setModalError(''); loadNotesList(); setTimeout(() => continueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100) }}
           onRegenerate={handleGeneratePlan}
           loading={modalLoading}
           error={modalError}

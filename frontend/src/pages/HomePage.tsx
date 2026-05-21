@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getGoals, createGoal, deleteGoal, getGoalsProgress } from '../services/api'
+import { getGoals, createGoal, deleteGoal, getGoalsProgress, getNotes } from '../services/api'
 import type { LearningGoal } from '../types'
-import { Plus, Target, Calendar, Trash2, BookOpen, Sparkles, ChevronRight } from 'lucide-react'
+import { Plus, Target, Calendar, Trash2, BookOpen, Sparkles, ChevronRight, StickyNote } from 'lucide-react'
 
 export default function HomePage() {
   const [goals, setGoals] = useState<LearningGoal[]>([])
   const [progress, setProgress] = useState<Record<number, { learned: number; total: number; percent: number }>>({})
+  const [noteCounts, setNoteCounts] = useState<Record<number, number>>({})
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [title, setTitle] = useState('')
@@ -22,6 +23,13 @@ export default function HomePage() {
       const map: Record<number, any> = {}
       progressData.forEach(p => { map[p.goal_id] = { learned: p.learned, total: p.total, percent: p.percent } })
       setProgress(map)
+      // 加载笔记数量
+      const noteResults = await Promise.allSettled(goalsData.map(g => getNotes(g.id)))
+      const counts: Record<number, number> = {}
+      noteResults.forEach((r, i) => {
+        if (r.status === 'fulfilled') counts[goalsData[i].id] = r.value.length
+      })
+      setNoteCounts(counts)
     } catch (e) {
       console.error('加载目标失败', e)
     } finally {
@@ -195,6 +203,12 @@ export default function HomePage() {
                           style={{ width: `${progress[g.id].percent}%` }}
                         />
                       </div>
+                    </div>
+                  )}
+                  {noteCounts[g.id] > 0 && (
+                    <div className="mt-1.5 flex items-center gap-1 text-[10px] text-amber-500">
+                      <StickyNote size={11} />
+                      {noteCounts[g.id]} 条笔记
                     </div>
                   )}
                 </div>

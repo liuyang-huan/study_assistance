@@ -150,3 +150,12 @@ export interface HeatmapDay {
   plan_completed: boolean
   questions: number
 }
+
+export interface Note {
+  id: number
+  goal_id: number
+  topic_title: string
+  content: string
+  created_at: string
+  updated_at: string
+}

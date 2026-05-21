@@ -1,8 +1,10 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .database import engine, Base
-from .routers import goals, roadmap, journal, questions, plans, stats, export, chat, progress
+from .routers import goals, roadmap, journal, questions, plans, stats, export, chat, progress, notes, upload
 
 # 自动建表
 Base.metadata.create_all(bind=engine)
@@ -40,6 +42,12 @@ app.include_router(stats.router)
 app.include_router(export.router)
 app.include_router(chat.router)
 app.include_router(progress.router)
+app.include_router(notes.router)
+app.include_router(upload.router)
+
+_uploads_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'uploads')
+os.makedirs(_uploads_dir, exist_ok=True)
+app.mount('/uploads', StaticFiles(directory=_uploads_dir), name='uploads')
 
 
 @app.get('/api/health')

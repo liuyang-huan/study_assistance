@@ -2,9 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   BookOpen, Clock, Lightbulb, Code, PenLine, X, Target,
   Play, Pause, RotateCcw, ChevronRight, ChevronLeft, Save, Loader2, AlertCircle,
-  MessageCircle, Send, Bot, User, Sparkles, Menu, GitBranch, Layers, LightbulbOff, MessagesSquare, Minimize2, Maximize2
+  MessageCircle, Send, Bot, User, Sparkles, Menu, GitBranch, Layers, LightbulbOff, MessagesSquare, Minimize2, Maximize2, StickyNote, FileText, Image
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { getNotes, saveNote } from '../services/api'
+import { handleImageUpload } from '../utils/imageUpload'
+import type { Note } from '../types'
 
 
 
@@ -202,10 +205,13 @@ export default function LearningModal({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // 笔记
-  const notesKey = `learning-note-${task.title}`
-  const [notes, setNotes] = useState(() => localStorage.getItem(notesKey) || '')
+  const [notes, setNotes] = useState('')
+  const [noteId, setNoteId] = useState<number | null>(null)
   const [notesSaved, setNotesSaved] = useState(false)
+  const [notesSaving, setNotesSaving] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
+  const [allNotes, setAllNotes] = useState<Note[]>([])
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showRightPanel, setShowRightPanel] = useState(false)
   const [isChatExpanded, setIsChatExpanded] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -220,6 +226,7 @@ export default function LearningModal({
   const [chatLoading, setChatLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
+  const noteTextareaRef = useRef<HTMLTextAreaElement>(null)
 
   const buildContext = () => {
     const parts = [goalTitle]
@@ -400,11 +407,73 @@ export default function LearningModal({
     setTimerSeconds(timerMode === 'focus' ? pomodoroDuration : 300)
   }
 
-  const saveNotes = () => {
-    localStorage.setItem(notesKey, notes)
-    setNotesSaved(true)
-    setTimeout(() => setNotesSaved(false), 2000)
+  const loadNotesForGoal = async () => {
+    try {
+      const [topicNotes, all] = await Promise.all([
+        getNotes(goalId, task.title),
+        getNotes(goalId),
+      ])
+      if (topicNotes.length > 0) {
+        setNotes(topicNotes[0].content)
+        setNoteId(topicNotes[0].id)
+      }
+      setAllNotes(all)
+    } catch {}
   }
+
+  const autoSaveNote = (content: string) => {
+    setNotes(content)
+    setNotesSaved(false)
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(async () => {
+      setNotesSaving(true)
+      try {
+        const result = await saveNote(goalId, { topic_title: task.title, content })
+        setNoteId(result.id)
+        setNotesSaved(true)
+        setAllNotes(prev => {
+          const idx = prev.findIndex(n => n.id === result.id)
+          if (idx >= 0) {
+            const next = [...prev]
+            next[idx] = result
+            return next
+          }
+          return [result, ...prev]
+        })
+      } catch {}
+      setNotesSaving(false)
+    }, 1500)
+  }
+
+  const handleNotePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData.items
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        e.preventDefault()
+        const file = items[i].getAsFile()
+        if (file && noteTextareaRef.current) {
+          handleImageUpload(file, noteTextareaRef.current, (newContent) => autoSaveNote(newContent))
+        }
+        break
+      }
+    }
+  }, [])
+
+  const handleNoteDrop = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file && file.type.startsWith('image/') && noteTextareaRef.current) {
+      handleImageUpload(file, noteTextareaRef.current, (newContent) => autoSaveNote(newContent))
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
+  }, [])
+
+  useEffect(() => {
+    if (showNotes) loadNotesForGoal()
+  }, [showNotes])
 
   const timerProgress = timerMode === 'focus'
     ? ((pomodoroDuration - timerSeconds) / pomodoroDuration) * 100
@@ -754,13 +823,6 @@ export default function LearningModal({
                 <Sparkles size={12} className="text-indigo-500" /> AI 学习搭子
               </h4>
               <button
-                onClick={() => setShowNotes(!showNotes)}
-                className={`text-[11px] flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-all ${
-                  showNotes ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200'
-                }`}>
-                <PenLine size={11} /> 笔记
-              </button>
-              <button
                 onClick={() => setIsChatExpanded(!isChatExpanded)}
                 title={isChatExpanded ? '收起面板' : '展开面板'}
                 className="text-[11px] flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-all bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200"
@@ -773,29 +835,6 @@ export default function LearningModal({
             </p>
           </div>
 
-          {/* 笔记区（可折叠） */}
-          {showNotes && (
-              <div className="overflow-hidden border-b border-gray-100">
-                <div className="p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-medium text-gray-500 dark:text-slate-400">学习笔记</span>
-                    <button onClick={saveNotes}
-                      className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-all ${
-                        notesSaved ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 hover:bg-gray-200'
-                      }`}>
-                      <Save size={10} /> {notesSaved ? '已保存' : '保存'}
-                    </button>
-                  </div>
-                  <textarea
-                    className="w-full p-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs resize-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
-                    rows={4}
-                    placeholder="记录你的学习笔记、疑问、心得..."
-                    value={notes}
-                    onChange={e => { setNotes(e.target.value); setNotesSaved(false) }}
-                  />
-                </div>
-              </div>
-            )}
 
           {/* 聊天消息区 */}
           <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3">
@@ -872,6 +911,106 @@ export default function LearningModal({
             </div>
           </div>
         </aside>
+
+      {/* 左下角浮动笔记面板 */}
+      <div className="fixed bottom-4 left-4 z-[60]">
+        {showNotes ? (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-2xl w-[420px] max-h-[65vh] flex flex-col overflow-hidden animate-[fadeIn_0.15s_ease]">
+            {/* 面板头部 */}
+            <div className="p-3.5 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <StickyNote size={16} className="text-amber-500" />
+                <span className="text-sm font-semibold text-gray-800 dark:text-slate-200">学习笔记</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                  notesSaving ? 'text-amber-600 bg-amber-50' :
+                  notesSaved ? 'text-emerald-600 bg-emerald-50' : 'text-gray-300'
+                }`}>
+                  {notesSaving ? '保存中...' : notesSaved ? '已保存' : ''}
+                </span>
+              </div>
+              <button onClick={() => setShowNotes(false)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer transition-colors">
+                <X size={14} className="text-gray-400 dark:text-slate-500" />
+              </button>
+            </div>
+
+            {/* 正文区域 */}
+            <div className="p-3.5 overflow-y-auto flex-1">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] text-gray-400 dark:text-slate-500">
+                  当前知识点: <span className="text-gray-600 dark:text-slate-400 font-medium">{task.title}</span>
+                </p>
+                <button
+                  onClick={() => document.getElementById('note-image-input')?.click()}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                  title="插入图片"
+                >
+                  <Image size={14} className="text-gray-400 dark:text-slate-500" />
+                </button>
+                <input
+                  id="note-image-input"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0]
+                    if (file && noteTextareaRef.current) {
+                      handleImageUpload(file, noteTextareaRef.current, (newContent) => autoSaveNote(newContent))
+                    }
+                    e.target.value = ''
+                  }}
+                />
+              </div>
+              <textarea
+                ref={noteTextareaRef}
+                className="w-full p-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm resize-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                rows={8}
+                placeholder="记录你的学习笔记、疑问、心得... (支持粘贴/拖拽图片)"
+                value={notes}
+                onChange={e => autoSaveNote(e.target.value)}
+                onPaste={handleNotePaste}
+                onDrop={handleNoteDrop}
+                onDragOver={e => e.preventDefault()}
+              />
+
+              {/* 本目标其他笔记 */}
+              {allNotes.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-slate-800">
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500 mb-2 flex items-center gap-1">
+                    <FileText size={11} /> 本目标笔记 ({allNotes.length})
+                  </p>
+                  <div className="max-h-44 overflow-y-auto space-y-1.5">
+                    {allNotes.map(n => (
+                      <button
+                        key={n.id}
+                        onClick={() => { setNotes(n.content); setNoteId(n.id) }}
+                        className={`w-full text-left p-2.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                          n.topic_title === task.title
+                            ? 'bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100'
+                            : 'bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        <p className="font-medium text-gray-700 dark:text-slate-300 truncate">{n.topic_title}</p>
+                        <p className="text-gray-400 dark:text-slate-500 truncate mt-0.5">
+                          {n.content.slice(0, 60)}{n.content.length > 60 ? '...' : ''}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowNotes(true)}
+            className="w-11 h-11 rounded-2xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shadow-lg hover:shadow-xl hover:border-amber-300 transition-all cursor-pointer flex items-center justify-center group"
+            title="打开笔记"
+          >
+            <StickyNote size={20} className="text-gray-400 dark:text-slate-500 group-hover:text-amber-500 transition-colors" />
+          </button>
+        )}
+      </div>
 
       {/* 选中文字浮动快捷操作栏 */}
       {selectedText && selectionRef.current && (

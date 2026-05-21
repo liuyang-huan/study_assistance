@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQuestion, LearningStats } from '../types'
+import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQuestion, LearningStats, Note } from '../types'
 
 const http = axios.create({ baseURL: '/api', timeout: 90000 })
 
@@ -67,6 +67,8 @@ export const exportPlan = (goalId: number, date?: string) =>
   http.get(`/goals/${goalId}/export/plan`, { params: { date }, responseType: 'blob' }).then(r => r.data)
 export const exportJournal = (goalId: number) =>
   http.get(`/goals/${goalId}/export/journal`, { responseType: 'blob' }).then(r => r.data)
+export const exportNotes = (goalId: number) =>
+  http.get(`/goals/${goalId}/export/notes`, { responseType: 'blob' }).then(r => r.data)
 export const exportAll = (goalId: number) =>
   http.get(`/goals/${goalId}/export/all`, { responseType: 'blob' }).then(r => r.data)
 
@@ -98,3 +100,18 @@ export const markTopicLearned = (goalId: number, topicDay: number) =>
   http.post(`/goals/${goalId}/learned/${topicDay}`)
 export const markTopicsUpTo = (goalId: number, topicDay: number) =>
   http.post<{ learned_days: number[] }>(`/goals/${goalId}/learned/up-to/${topicDay}`)
+
+// 学习笔记
+export const getNotes = (goalId: number, topicTitle?: string) =>
+  http.get<Note[]>(`/goals/${goalId}/notes`, { params: topicTitle ? { topic_title: topicTitle } : {} }).then(r => r.data)
+export const saveNote = (goalId: number, data: { topic_title: string; content: string }) =>
+  http.post<Note>(`/goals/${goalId}/notes`, data).then(r => r.data)
+export const deleteNote = (goalId: number, noteId: number) =>
+  http.delete(`/goals/${goalId}/notes/${noteId}`)
+
+export const uploadImage = async (file: File): Promise<{ url: string }> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await http.post('/upload/image', formData)
+  return response.data
+}
