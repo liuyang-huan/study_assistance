@@ -81,6 +81,11 @@ export interface Materials {
   practice?: string
   examples?: Example[]
   practice_questions?: PracticeQuestion[]
+  original_text?: string
+  is_translated?: boolean
+  section_id?: number
+  page_start?: number
+  page_end?: number
 }
 
 export interface PlanTask {
@@ -158,4 +163,43 @@ export interface Note {
   content: string
   created_at: string
   updated_at: string
+}
+
+export interface BookImport {
+  id: number
+  goal_id: number
+  filename: string
+  original_filename: string
+  file_size: number
+  status: 'processing' | 'done' | 'error'
+  error_message?: string
+  source_language?: string
+  toc?: TocEntry[]
+  total_pages?: number
+  created_at: string
+}
+
+export interface TocEntry {
+  title: string
+  level: number
+  section_index: number
+}
+
+export interface DocumentImportResult {
+  goal: LearningGoal
+  book_import: BookImport
+}
+
+export interface BookSection {
+  id: number
+  section_index: number
+  title: string
+  level: number
+  content?: string
+  page_start?: number
+  page_end?: number
+  translated_title?: string
+  translated_content?: string
+  topic_day?: number
+  read_at?: string
 }

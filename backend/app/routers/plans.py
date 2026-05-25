@@ -9,6 +9,7 @@ from ..models.roadmap import Roadmap
 from ..models.plan import DailyPlan
 from ..models.journal import JournalEntry
 from ..models.question import DailyQuestion
+from ..models.book_import import BookImport
 from ..schemas.api import PlanResponse
 from ..services.ai_service import chat_json
 from ..services.prompt_templates import generate_daily_plan
@@ -21,6 +22,28 @@ def _plan_to_response(p: DailyPlan) -> dict:
             'plan_content': json.loads(p.plan_content) if isinstance(p.plan_content, str) else p.plan_content,
             'is_adjusted': p.is_adjusted, 'completed': p.completed,
             'created_at': p.created_at.isoformat()}
+
+
+def _build_book_plan(roadmap_data: dict, learned_days: set[int]) -> dict:
+    """为教材学习模式构建每日规划：直接从路线中取下一个未学的主题。"""
+    tasks = []
+    for phase in roadmap_data.get('phases', []):
+        for topic in phase.get('topics', []):
+            day = topic.get('day')
+            if day and day not in learned_days:
+                tasks.append({
+                    'title': topic.get('title', ''),
+                    'duration_min': 30,
+                    'detail': f'Day {day} — 阅读教材原文',
+                    'day': day,
+                })
+                if len(tasks) >= 2:
+                    break
+        if len(tasks) >= 2:
+            break
+    if not tasks:
+        tasks.append({'title': '复习已学内容', 'duration_min': 30, 'detail': '回顾之前学过的章节'})
+    return {'tasks': tasks, 'note': '今日教材阅读计划'}
 
 
 @router.get('/goals/{goal_id}/plans', response_model=PlanResponse | dict)
@@ -42,6 +65,30 @@ def gen_plan(goal_id: int, teaching_style: str = Query(''), db: Session = Depend
 
     rm = db.query(Roadmap).filter(Roadmap.goal_id == goal_id, Roadmap.is_active == True).first()
     roadmap_data = json.loads(rm.content) if rm and isinstance(rm.content, str) else (rm.content if rm else {'phases': []})
+
+    # 检查是否关联了教材导入
+    book_import = db.query(BookImport).filter(
+        BookImport.goal_id == goal_id, BookImport.status == 'done'
+    ).order_by(BookImport.id.desc()).first()
+
+    if book_import:
+        # 教材学习模式：直接从路线取下一个未学主题，不调 AI
+        from ..models.progress import LearnedTopic
+        learned = db.query(LearnedTopic.topic_day).filter(
+            LearnedTopic.goal_id == goal_id
+        ).all()
+        learned_days = {r[0] for r in learned}
+        result = _build_book_plan(roadmap_data, learned_days)
+
+        today = date.today()
+        db.query(DailyPlan).filter(DailyPlan.goal_id == goal_id, DailyPlan.date == today).delete()
+        p = DailyPlan(goal_id=goal_id, date=today, plan_content=json.dumps(result, ensure_ascii=False))
+        db.add(p)
+        db.commit()
+        db.refresh(p)
+        return _plan_to_response(p)
+
+    # 原有 AI 规划流程
     current_phase = roadmap_data.get('phases', [{}])[0].get('title', '初始阶段') if roadmap_data.get('phases') else '初始阶段'
 
     recent_journals = db.query(JournalEntry).filter(

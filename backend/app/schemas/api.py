@@ -150,3 +150,46 @@ class NoteResponse(BaseModel):
     content: str
     created_at: datetime
     updated_at: datetime
+
+
+# --- 图书导入 ---
+class TocEntrySchema(BaseModel):
+    title: str
+    level: int
+    section_index: int
+
+
+class BookImportResponse(BaseModel):
+    id: int
+    goal_id: int
+    filename: str
+    original_filename: str
+    file_size: int
+    status: str
+    error_message: str | None = None
+    toc: list[TocEntrySchema] | None = None
+    total_pages: int | None = None
+    created_at: datetime
+
+    @field_validator('toc', mode='before')
+    @classmethod
+    def parse_toc(cls, v):
+        if isinstance(v, str) and v:
+            return json.loads(v)
+        return v
+
+
+class TranslationUpdate(BaseModel):
+    content_translated: str
+    title_translated: str | None = None
+
+
+class BookSectionResponse(BaseModel):
+    id: int
+    section_index: int
+    title: str
+    level: int
+    content: str = ''
+    topic_day: int | None = None
+    translated_title: str | None = None
+    translated_content: str | None = None

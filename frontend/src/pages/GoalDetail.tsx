@@ -5,17 +5,18 @@ import {
   generateQuestions, submitAnswer, saveJournal, getPlans,
   exportRoadmap, exportPlan, exportJournal, exportNotes, downloadBlob, learnTopic, getLearnedTopics, markTopicsUpTo,
   getNotes, saveNote,
+  uploadDocument, getDocumentStatus,
 } from '../services/api'
 import StatsPanel from '../components/StatsPanel'
 import LearningModal from '../components/LearningModal'
 import KnowledgeGraph from '../components/KnowledgeGraph'
 import { handleImageUpload } from '../utils/imageUpload'
-import type { GoalDetail as GoalDetailType, Note } from '../types'
+import type { GoalDetail as GoalDetailType, Note, BookImport } from '../types'
 import {
   ArrowLeft, Target, RefreshCw, Calendar, Sparkles, CheckCircle2,
   BookOpen, MessageCircle, Clock, Send, Loader2, PenLine,
   ChevronDown, ChevronUp, AlertCircle, Play, FileText, Brain, GitBranch,
-  Download, StickyNote, Image
+  Download, StickyNote, Image, Upload, FileText as FileTextIcon, X, File
 } from 'lucide-react'
 
 // 学习材料预缓存（模块级，跨渲染保持）
@@ -194,21 +195,51 @@ export default function GoalDetail() {
 
   // 已学习的主题天数（localStorage 兜底 + 后端持久化）
   const learnedKey = `learned-days-${id}`
+  // 缓存版本校验：如果目标被删除重建（同 ID 但 created_at 不同），清掉旧缓存
+  const cacheVersionKey = `goal-version-${id}`
   const [learnedDays, setLearnedDays] = useState<Set<number>>(new Set())
   const [learnedLoaded, setLearnedLoaded] = useState(false)
+
+  // 文档导入
+  const [bookImport, setBookImport] = useState<BookImport | null>(null)
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [tocExpanded, setTocExpanded] = useState(true)
+
+  useEffect(() => {
+    if (!id) return
+    getDocumentStatus(+id).then(setBookImport).catch(() => {})
+  }, [id])
+
+  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !id) return
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (ext !== 'pdf' && ext !== 'docx') {
+      alert('只支持 PDF 和 DOCX 文件')
+      return
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      alert('文件大小不能超过 50MB')
+      return
+    }
+    setUploadingDoc(true)
+    setUploadProgress(0)
+    try {
+      const result = await uploadDocument(+id, file, setUploadProgress)
+      setBookImport(result)
+    } catch (err: any) {
+      alert('上传失败: ' + (err?.response?.data?.detail || err.message))
+    } finally {
+      setUploadingDoc(false)
+      e.target.value = ''
+    }
+  }
 
   useEffect(() => {
     if (!id) return
     getLearnedTopics(+id).then(days => {
-      if (days.length > 0) {
-        setLearnedDays(new Set(days))
-      } else {
-        // 后端无数据，从 localStorage 恢复
-        try {
-          const raw = localStorage.getItem(learnedKey)
-          if (raw) setLearnedDays(new Set(JSON.parse(raw)))
-        } catch {}
-      }
+      setLearnedDays(new Set(days))
     }).catch(() => {
       // 网络异常时从 localStorage 回退
       try {
@@ -225,6 +256,15 @@ export default function GoalDetail() {
     try {
       const data = await getGoal(+id)
       setGoal(data)
+      // 校验缓存版本：如果目标被删重建，清掉旧 localStorage 数据
+      const savedVersion = localStorage.getItem(cacheVersionKey)
+      if (savedVersion && savedVersion !== data.created_at) {
+        localStorage.removeItem(learnedKey)
+        localStorage.removeItem(pageTimeKey)
+        pageSecondsRef.current = 0
+        setPageSeconds(0)
+      }
+      localStorage.setItem(cacheVersionKey, data.created_at)
       if (data.today_journal) {
         setJournalContent(data.today_journal.content || '')
         setJournalReflection(data.today_journal.reflection || '')
@@ -1119,6 +1159,133 @@ export default function GoalDetail() {
         )}
       </div>
 
+      {/* 导入教材 */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm p-5 mb-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-2">
+            <FileTextIcon size={18} className="text-amber-500" />
+            导入教材
+          </h2>
+          {bookImport && (
+            <button
+              onClick={async () => {
+                if (!confirm('重新导入将覆盖当前教材内容，确认继续？')) return
+                setBookImport(null)
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-all"
+            >
+              <RefreshCw size={12} /> 重新导入
+            </button>
+          )}
+        </div>
+
+        {bookImport ? (
+          bookImport.status === 'processing' ? (
+            <div className="text-center py-6">
+              <Loader2 size={36} className="mx-auto mb-3 text-amber-400 animate-spin" />
+              <p className="text-gray-700 dark:text-slate-300 font-medium mb-1">AI 正在分析目录结构</p>
+              <p className="text-gray-400 dark:text-slate-500 text-sm">提取章节信息，识别层级关系...</p>
+            </div>
+          ) : bookImport.status === 'error' ? (
+            <div className="text-center py-6">
+              <AlertCircle size={36} className="mx-auto mb-3 text-red-400" />
+              <p className="text-red-600 font-medium mb-1">导入失败</p>
+              <p className="text-gray-400 dark:text-slate-500 text-sm mb-4">{bookImport.error_message}</p>
+              <button
+                onClick={() => setBookImport(null)}
+                className="px-4 py-2 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-xl hover:bg-gray-200 text-sm cursor-pointer transition-colors"
+              >
+                重试
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center gap-3 mb-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl">
+                <File size={20} className="text-amber-600 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-800 dark:text-slate-200 truncate">{bookImport.original_filename}</p>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                    {(bookImport.file_size / 1024 / 1024).toFixed(1)} MB
+                    {bookImport.total_pages ? ` · ${bookImport.total_pages} 页` : ''}
+                  </p>
+                </div>
+              </div>
+
+              {bookImport.source_language && bookImport.source_language !== 'zh' && (
+                <div className="flex items-center gap-2 p-2.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800 mb-3">
+                  <Sparkles size={14} className="text-emerald-600 shrink-0" />
+                  <span className="text-xs text-emerald-700 dark:text-emerald-300">
+                    已自动从{bookImport.source_language === 'ja' ? '日语' : bookImport.source_language === 'en' ? '英语' : '外语'}翻译成中文
+                  </span>
+                </div>
+              )}
+
+              {bookImport.toc && bookImport.toc.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setTocExpanded(!tocExpanded)}
+                    className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300 mb-2 cursor-pointer transition-colors"
+                  >
+                    {tocExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    已识别 {bookImport.toc.length} 个章节
+                  </button>
+                  {tocExpanded && (
+                    <div className="border border-gray-100 dark:border-slate-800 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
+                      {bookImport.toc.map((entry: any, i: number) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-2 px-3 py-2 text-sm border-b border-gray-50 dark:border-slate-800 last:border-b-0 hover:bg-gray-50 dark:hover:bg-slate-800/50"
+                          style={{ paddingLeft: `${8 + entry.level * 16}px` }}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{ backgroundColor: entry.level === 1 ? '#f59e0b' : entry.level === 2 ? '#6366f1' : '#94a3b8' }} />
+                          <span className="text-gray-700 dark:text-slate-300 truncate">{entry.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(!bookImport.toc || bookImport.toc.length === 0) && (
+                <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-slate-800 rounded-xl text-sm text-gray-500 dark:text-slate-400">
+                  <AlertCircle size={14} />
+                  未能识别出章节结构，全文将作为单一学习内容。生成路线后可开始学习。
+                </div>
+              )}
+            </div>
+          )
+        ) : uploadingDoc ? (
+          <div className="text-center py-6">
+            <Loader2 size={36} className="mx-auto mb-3 text-indigo-400 animate-spin" />
+            <p className="text-gray-700 dark:text-slate-300 font-medium mb-2">正在上传文档</p>
+            <div className="w-full max-w-xs mx-auto bg-gray-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+            </div>
+            <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">{uploadProgress}%</p>
+          </div>
+        ) : (
+          <label className="block cursor-pointer">
+            <div className="border-2 border-dashed border-gray-200 dark:border-slate-700 rounded-xl p-8 text-center hover:border-amber-400 dark:hover:border-amber-500 hover:bg-amber-50/50 dark:hover:bg-amber-900/10 transition-all group">
+              <Upload size={36} className="mx-auto mb-3 text-gray-300 dark:text-slate-600 group-hover:text-amber-400 transition-colors" />
+              <p className="text-gray-500 dark:text-slate-400 text-sm mb-3 group-hover:text-amber-600 dark:group-hover:text-amber-400 font-medium">
+                上传 PDF 或 Word 教材文件
+              </p>
+              <p className="text-gray-300 dark:text-slate-600 text-xs mb-4">AI 将自动分析目录结构并生成学习路线</p>
+              <span className="inline-block px-4 py-2 bg-amber-500 text-white rounded-xl hover:bg-amber-600 text-sm cursor-pointer transition-colors font-medium">
+                选择文件
+              </span>
+            </div>
+            <input
+              type="file"
+              accept=".pdf,.docx"
+              onChange={handleDocumentUpload}
+              className="hidden"
+            />
+          </label>
+        )}
+      </div>
+
       {/* 学习路线 */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 dark:border-slate-800 shadow-sm p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
@@ -1300,7 +1467,13 @@ export default function GoalDetail() {
             {tasks.map((t: any, i: number) => (
               <div
                 key={i}
-                onClick={() => setSelectedTask(t)}
+                onClick={() => {
+                  if (!t.materials && t.day) {
+                    handleLearnTopic(t.day, t.title)
+                  } else {
+                    setSelectedTask(t)
+                  }
+                }}
                 className={`flex items-start gap-3 p-3.5 rounded-xl transition-all cursor-pointer group ${
                   currentPlan?.completed ? 'bg-emerald-50 dark:bg-emerald-900/30/50' :
                   isToday ? 'bg-gray-50 dark:bg-slate-800 hover:bg-indigo-50 dark:bg-indigo-900/30 hover:shadow-sm' : 'bg-gray-50 dark:bg-slate-800/50'

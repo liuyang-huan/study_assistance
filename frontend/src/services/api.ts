@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQuestion, LearningStats, Note } from '../types'
+import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQuestion, LearningStats, Note, BookImport, TocEntry, BookSection, DocumentImportResult } from '../types'
 
 const http = axios.create({ baseURL: '/api', timeout: 90000 })
 
@@ -108,6 +108,44 @@ export const saveNote = (goalId: number, data: { topic_title: string; content: s
   http.post<Note>(`/goals/${goalId}/notes`, data).then(r => r.data)
 export const deleteNote = (goalId: number, noteId: number) =>
   http.delete(`/goals/${goalId}/notes/${noteId}`)
+
+// 文档导入
+export const importDocument = async (file: File, onProgress?: (pct: number) => void): Promise<DocumentImportResult> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await http.post<DocumentImportResult>('/documents/import', formData, {
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+    },
+    timeout: 300000,
+  })
+  return response.data
+}
+
+export const uploadDocument = async (goalId: number, file: File, onProgress?: (pct: number) => void): Promise<BookImport> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await http.post<BookImport>(`/goals/${goalId}/documents/upload`, formData, {
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+    },
+    timeout: 300000,
+  })
+  return response.data
+}
+
+export const getDocumentStatus = (goalId: number) =>
+  http.get<BookImport>(`/goals/${goalId}/documents/status`).then(r => r.data)
+
+export const getDocumentToc = (goalId: number) =>
+  http.get<TocEntry[]>(`/goals/${goalId}/documents/toc`).then(r => r.data)
+
+export const getDocumentSections = (goalId: number) =>
+  http.get<BookSection[]>(`/goals/${goalId}/documents/sections`).then(r => r.data)
+
+// 翻译纠错
+export const updateSectionTranslation = (goalId: number, sectionId: number, data: { content_translated: string; title_translated?: string }) =>
+  http.put(`/goals/${goalId}/documents/sections/${sectionId}/translation`, data).then(r => r.data)
 
 export const uploadImage = async (file: File): Promise<{ url: string }> => {
   const formData = new FormData()

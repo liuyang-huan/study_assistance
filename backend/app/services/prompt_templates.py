@@ -188,6 +188,49 @@ def adjust_roadmap(current_roadmap: str, goal_title: str, progress_summary: str,
 {{"phases": [...]}}"""
 
 
+def extract_toc_from_book(book_title: str, full_text_sample: str) -> str:
+    return f"""你是一位图书分析专家。请分析以下书籍文本，提取其章节目录结构。
+
+    书名：{book_title}
+
+    【重要】下方===== 全书章节标题行汇总 =====部分包含了从全书各处提取的章节标题行（标注了行号）。
+    这些标题行覆盖了整本书的所有章节。你必须基于这些标题行来识别所有的 Chapter 和 Part，
+    确保不要遗漏任何一个章节。开头的文本内容仅用于补充了解章节内的子结构。
+
+    请提取这本书的完整章节目录结构。每个条目包含：
+    - title: 章节/节的标题（只保留实际的章节标题，过滤掉"前言""致谢""参考文献"等非主体内容）
+    - level: 层级（1=章/Part, 2=节, 3=小节）
+
+    务必包含"全书章节标题行汇总"中出现的每一个 Chapter 和 Part。
+
+    返回 JSON：
+    {{"has_toc": true, "entries": [{{"title": "第1章 概述", "level": 1}}, {{"title": "1.1 背景", "level": 2}}], "total_estimated_pages": 300}}
+
+    {full_text_sample}"""
+
+
+def generate_roadmap_from_toc(goal_title: str, goal_description: str, toc_json: str, book_title: str, teaching_style: str = '') -> str:
+    return f"""你是一个专业的学习规划师。用户想通过学习一本教材来掌握：{goal_title}。
+教材名称：{book_title}
+用户补充描述：{goal_description or '无'}。{_style_instruction(teaching_style)}
+
+这本书的目录结构如下（JSON格式）：
+{toc_json}
+
+请以这本书的目录为基础，生成学习路线。要求：
+- level=1 的章节作为学习阶段 (phase)
+- level>=2 的节/小节作为学习主题 (topic)。如果一个章下面没有小节，就把整章作为一个 topic
+- 阶段数量 = 章的数量
+- day 从 1 开始全局递增编号
+- duration_days 根据每个阶段内的 topic 数量合理设定
+- 每个 topic 附带 1-2 个推荐学习资源（可以是同类书籍的相关章节、在线文档等，不需要和原书完全一样）和 1-2 个练习任务
+
+重要：严格以 JSON 格式返回，不要包含任何其他文字：
+{{"phases": [{{"phase": 1, "title": "章标题", "duration_days": 7,
+"topics": [{{"day": 1, "title": "节标题", "resources": ["资源1"], "exercises": ["练习1"]}}]
+}}]}}"""
+
+
 def generate_concept_map(goal_title: str, roadmap_json: str) -> str:
     return f"""你是一个知识体系构建专家。用户正在学习「{goal_title}」，以下是完整的学习路线：
 
@@ -219,3 +262,41 @@ def generate_concept_map(goal_title: str, roadmap_json: str) -> str:
 - id 使用 "c_N" 格式，从 c_1 开始递增
 - dependencies 中 from 依赖 to，即必须先学 to 才能学 from
 - 只标注真正重要的依赖关系，不要过度关联"""
+
+
+def translate_section(section_title: str, section_content: str, source_lang: str = '英文') -> str:
+    return f"""你是一位专业的技术翻译。请将以下{source_lang}教材内容翻译成中文。
+
+原文标题：{section_title}
+
+翻译要求：
+- 准确传达原文意思，专业术语使用标准中文译名
+- 保持段落结构和 Markdown 格式（标题、列表、代码块等）
+- 代码示例、数学公式、专有名词（API、框架名等）、文件路径保留原文不变
+- 代码中的注释需要翻译成中文
+- 翻译要通顺自然，符合中文表达习惯
+- 如果原文有编号列表(1. 2. 3. 或 -)，保持列表结构
+
+原文内容：
+{section_content[:30000]}
+
+请严格以 JSON 格式返回，不要包含 Markdown 代码块标记：
+{{"title": "翻译后的标题", "content": "翻译后的完整内容"}}"""
+
+
+def translate_titles_batch(titles: list[str], source_lang: str = '英文') -> str:
+    titles_json = '\n'.join(f'  {{"index": {i}, "original": "{t}"}}' for i, t in enumerate(titles))
+    return f"""你是一位专业的技术翻译。请将以下{source_lang}教材目录中的所有章节标题翻译成中文。
+
+翻译要求：
+- 准确传达原标题含义，专业术语使用标准中文译名
+- 保持标题的简洁性，不要过度展开
+- 专有名词（API、框架名等）保留原文
+
+章节标题列表：
+[
+{titles_json}
+]
+
+请严格以 JSON 格式返回，不要包含 Markdown 代码块标记，为每个标题输出翻译结果：
+{{"translations": [{{"index": 0, "title": "翻译后的标题"}}, ...]}}"""

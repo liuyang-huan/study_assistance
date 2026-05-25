@@ -5,7 +5,7 @@ import {
   MessageCircle, Send, Bot, User, Sparkles, Menu, GitBranch, Layers, LightbulbOff, MessagesSquare, Minimize2, Maximize2, StickyNote, FileText, Image
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { getNotes, saveNote } from '../services/api'
+import { getNotes, saveNote, updateSectionTranslation } from '../services/api'
 import { handleImageUpload } from '../utils/imageUpload'
 import type { Note } from '../types'
 
@@ -36,6 +36,7 @@ interface Materials {
   practice?: string
   examples?: Example[]
   practice_questions?: PracticeQuestion[]
+  original_text?: string
 }
 
 interface TaskInfo {
@@ -215,6 +216,10 @@ export default function LearningModal({
   const [showRightPanel, setShowRightPanel] = useState(false)
   const [isChatExpanded, setIsChatExpanded] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showOriginal, setShowOriginal] = useState(false)
+  const [editingTranslation, setEditingTranslation] = useState(false)
+  const [translationEditText, setTranslationEditText] = useState('')
+  const [savingTranslation, setSavingTranslation] = useState(false)
 
   // 选中文字快速提问
   const [selectedText, setSelectedText] = useState('')
@@ -699,6 +704,87 @@ export default function LearningModal({
                   </section>
                 )}
 
+                {/* 原文/AI 内容切换 */}
+                {m.original_text && (
+                  <div className="flex gap-1 mb-4 border-b border-gray-100 dark:border-slate-800 pb-2 flex-wrap">
+                    <button onClick={() => { setShowOriginal(false); setEditingTranslation(false) }}
+                      className={`px-3 py-1.5 text-xs rounded-lg transition-colors cursor-pointer font-medium ${
+                        !showOriginal && !editingTranslation ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-400'
+                      }`}>
+                      AI 讲解内容
+                    </button>
+                    <button onClick={() => { setShowOriginal(true); setEditingTranslation(false) }}
+                      className={`px-3 py-1.5 text-xs rounded-lg transition-colors cursor-pointer font-medium ${
+                        showOriginal && !editingTranslation ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300' : 'text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-400'
+                      }`}>
+                      教材原文
+                    </button>
+                    {m.is_translated && (
+                      <button onClick={() => { setEditingTranslation(true); setShowOriginal(false); setTranslationEditText(m.original_text || '') }}
+                        className={`px-3 py-1.5 text-xs rounded-lg transition-colors cursor-pointer font-medium ${
+                          editingTranslation ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700' : 'text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-400'
+                        }`}>
+                        编辑翻译
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* 教材原文 */}
+                {editingTranslation ? (
+                  <section id="sec-edit-translation">
+                    <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800 p-6 mb-4">
+                      <h3 className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 mb-3">
+                        <FileText size={15} /> 编辑翻译
+                      </h3>
+                      <textarea
+                        className="w-full p-3 bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-xl text-sm resize-y min-h-[300px] focus:border-emerald-400 outline-none transition-colors"
+                        value={translationEditText}
+                        onChange={e => setTranslationEditText(e.target.value)}
+                      />
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={async () => {
+                            if (!m.section_id) return
+                            setSavingTranslation(true)
+                            try {
+                              await updateSectionTranslation(goalId, m.section_id, { content_translated: translationEditText })
+                              m.original_text = translationEditText
+                              setShowOriginal(true)
+                              setEditingTranslation(false)
+                            } catch {
+                              alert('保存翻译修改失败')
+                            } finally {
+                              setSavingTranslation(false)
+                            }
+                          }}
+                          disabled={savingTranslation}
+                          className="px-4 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 disabled:opacity-50 text-sm cursor-pointer font-medium transition-colors"
+                        >
+                          {savingTranslation ? '保存中...' : '保存修改'}
+                        </button>
+                        <button
+                          onClick={() => setEditingTranslation(false)}
+                          className="px-4 py-2 bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 rounded-xl hover:bg-gray-200 dark:hover:bg-slate-700 text-sm cursor-pointer transition-colors"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                ) : showOriginal && m.original_text ? (
+                  <section id="sec-original">
+                    <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-100 dark:border-amber-800 p-6 mb-4">
+                      <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 mb-3">
+                        <FileText size={15} /> 教材原文{m.is_translated ? '（AI 翻译）' : ''}
+                      </h3>
+                      <div className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed max-h-[60vh] overflow-y-auto">
+                        <Markdown text={m.original_text} />
+                      </div>
+                    </div>
+                  </section>
+                ) : (
+                  <>
                 {/* 学习内容 */}
                 {m.content && (
                   <section id="sec-content">
@@ -799,6 +885,8 @@ export default function LearningModal({
                     </div>
                   </section>
                 )}
+              </>
+            )}
               </>
             )}
           </div>

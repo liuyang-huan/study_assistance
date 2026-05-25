@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +13,8 @@ from ..models.question import DailyQuestion, UserAnswer
 from ..models.journal import JournalEntry
 from ..models.learned import LearnedTopic
 from ..models.content_cache import ContentCache
+from ..models.book_import import BookImport, BookSection
+from ..models.note import UserNote
 from ..services.ai_service import chat_json
 from ..services.prompt_templates import generate_topic_materials
 from ..schemas.api import GoalCreate, GoalUpdate, GoalResponse, GoalDetailResponse
@@ -171,6 +174,30 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)):
     g = db.query(LearningGoal).filter(LearningGoal.id == goal_id).first()
     if not g:
         raise HTTPException(status_code=404, detail='目标不存在')
+
+    # 清理上传的文档文件
+    book_imports = db.query(BookImport).filter(BookImport.goal_id == goal_id).all()
+    for bi in book_imports:
+        file_path = os.path.join(
+            os.path.dirname(__file__), '..', '..', '..', 'data', 'uploads', 'documents', bi.filename
+        )
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+    # 显式逐表删除（确保 CASCADE 以外的数据也被清理）
+    db.query(UserNote).filter(UserNote.goal_id == goal_id).delete()
+    db.query(LearnedTopic).filter(LearnedTopic.goal_id == goal_id).delete()
+    db.query(ContentCache).filter(ContentCache.goal_id == goal_id).delete()
+    db.query(UserAnswer).filter(UserAnswer.question_id.in_(
+        db.query(DailyQuestion.id).filter(DailyQuestion.goal_id == goal_id)
+    )).delete(synchronize_session='fetch')
+    db.query(DailyQuestion).filter(DailyQuestion.goal_id == goal_id).delete()
+    db.query(DailyPlan).filter(DailyPlan.goal_id == goal_id).delete()
+    db.query(JournalEntry).filter(JournalEntry.goal_id == goal_id).delete()
+    db.query(BookSection).filter(BookSection.goal_id == goal_id).delete()
+    db.query(BookImport).filter(BookImport.goal_id == goal_id).delete()
+    db.query(Roadmap).filter(Roadmap.goal_id == goal_id).delete()
+
     db.delete(g)
     db.commit()
     return {'ok': True}

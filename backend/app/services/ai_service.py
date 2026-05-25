@@ -49,11 +49,22 @@ def chat_json(messages: list[dict], temperature: float = 0.7, timeout: float | N
             return json.loads(match.group())
         except json.JSONDecodeError:
             pass
-    # 重试一次，强调 JSON 格式
+    # 重试一次，使用 json_object 格式
     messages.append({'role': 'assistant', 'content': text})
     messages.append({'role': 'user', 'content': '请严格按 JSON 格式重新输出，不要添加任何额外文字。'})
-    text2 = chat(messages, temperature=0.3, timeout=timeout)
+    kwargs2 = dict(model='deepseek-chat', messages=messages, temperature=0.3, response_format={'type': 'json_object'})
+    if timeout is not None:
+        kwargs2['timeout'] = timeout
+    resp2 = client.chat.completions.create(**kwargs2)
+    text2 = resp2.choices[0].message.content or ''
+    try:
+        return json.loads(text2)
+    except json.JSONDecodeError:
+        pass
     match2 = re.search(r'\{[\s\S]*\}', text2)
     if match2:
-        return json.loads(match2.group())
+        try:
+            return json.loads(match2.group())
+        except json.JSONDecodeError:
+            pass
     raise ValueError(f'AI 返回无法解析为 JSON: {text2[:200]}')

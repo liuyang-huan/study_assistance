@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getGoals, createGoal, deleteGoal, getGoalsProgress, getNotes } from '../services/api'
+import { getGoals, createGoal, deleteGoal, getGoalsProgress, getNotes, importDocument } from '../services/api'
 import type { LearningGoal } from '../types'
-import { Plus, Target, Calendar, Trash2, BookOpen, Sparkles, ChevronRight, StickyNote } from 'lucide-react'
+import { Plus, Target, Calendar, Trash2, BookOpen, Sparkles, ChevronRight, StickyNote, Upload } from 'lucide-react'
 
 export default function HomePage() {
   const [goals, setGoals] = useState<LearningGoal[]>([])
@@ -13,6 +13,9 @@ export default function HomePage() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const navigate = useNavigate()
 
@@ -63,6 +66,24 @@ export default function HomePage() {
       await loadGoals()
     } catch (e) {
       console.error('删除失败', e)
+    }
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    setImportProgress(0)
+    try {
+      const result = await importDocument(file, (pct) => setImportProgress(pct))
+      navigate(`/goals/${result.goal.id}`)
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.message || '导入失败'
+      alert(msg)
+    } finally {
+      setImporting(false)
+      setImportProgress(0)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -140,6 +161,44 @@ export default function HomePage() {
               </button>
             </div>
           </form>
+        )}
+      </div>
+
+      {/* 导入教材 */}
+      <div className="max-w-lg mx-auto mb-8">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.docx"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+        {importing ? (
+          <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800">
+            <div className="flex items-center gap-3 mb-2">
+              <svg className="animate-spin w-5 h-5 text-indigo-500" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-sm text-indigo-600 dark:text-indigo-400">
+                正在导入教材… {importProgress > 0 && `${importProgress}%`}
+              </span>
+            </div>
+            <div className="w-full h-1.5 bg-indigo-100 dark:bg-indigo-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-indigo-400 to-purple-500 rounded-full transition-all duration-300"
+                style={{ width: `${importProgress || 5}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full p-4 border-2 border-dashed border-amber-200 dark:border-amber-800 rounded-2xl text-amber-500 dark:text-amber-400 hover:border-amber-400 hover:text-amber-600 transition-all cursor-pointer group"
+          >
+            <Upload size={24} className="mx-auto mb-1 group-hover:-translate-y-0.5 transition-transform" />
+            <span className="text-sm">导入教材（PDF / DOCX）</span>
+          </button>
         )}
       </div>
 
