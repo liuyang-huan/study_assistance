@@ -190,6 +190,13 @@ export interface DocumentImportResult {
   book_import: BookImport
 }
 
+export interface GlobalNote {
+  id: number
+  content: string
+  created_at: string
+  updated_at: string
+}
+
 export interface BookSection {
   id: number
   section_index: number

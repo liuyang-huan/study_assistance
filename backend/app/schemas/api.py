@@ -179,6 +179,22 @@ class BookImportResponse(BaseModel):
         return v
 
 
+# --- 全局笔记 ---
+class GlobalNoteCreate(BaseModel):
+    content: str = ''
+
+
+class GlobalNoteUpdate(BaseModel):
+    content: str
+
+
+class GlobalNoteResponse(BaseModel):
+    id: int
+    content: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class TranslationUpdate(BaseModel):
     content_translated: str
     title_translated: str | None = None

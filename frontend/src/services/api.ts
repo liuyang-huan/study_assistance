@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQuestion, LearningStats, Note, BookImport, TocEntry, BookSection, DocumentImportResult } from '../types'
+import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQuestion, LearningStats, Note, GlobalNote, BookImport, TocEntry, BookSection, DocumentImportResult } from '../types'
 
 const http = axios.create({ baseURL: '/api', timeout: 90000 })
 
@@ -153,3 +153,13 @@ export const uploadImage = async (file: File): Promise<{ url: string }> => {
   const response = await http.post('/upload/image', formData)
   return response.data
 }
+
+// 全局笔记本
+export const getGlobalNotes = () =>
+  http.get<GlobalNote[]>('/notes').then(r => r.data)
+export const createGlobalNote = (content: string) =>
+  http.post<GlobalNote>('/notes', { content }).then(r => r.data)
+export const updateGlobalNote = (noteId: number, content: string) =>
+  http.put<GlobalNote>(`/notes/${noteId}`, { content }).then(r => r.data)
+export const deleteGlobalNote = (noteId: number) =>
+  http.delete(`/notes/${noteId}`)
