@@ -197,6 +197,17 @@ export interface GlobalNote {
   updated_at: string
 }
 
+export interface TodoTask {
+  id: number
+  title: string
+  description: string | null
+  deadline: string | null
+  completed: boolean
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface BookSection {
   id: number
   section_index: number

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { getGoals, createGoal, deleteGoal, getGoalsProgress, getNotes, importDocument, getGlobalNotes, createGlobalNote, updateGlobalNote, deleteGlobalNote } from '../services/api'
 import type { LearningGoal, GlobalNote } from '../types'
 import { Plus, Target, Calendar, Trash2, BookOpen, Sparkles, ChevronRight, StickyNote, Upload, NotebookPen, Pencil, Check, X } from 'lucide-react'
+import TodoList from '../components/TodoList'
 
 export default function HomePage() {
   const [goals, setGoals] = useState<LearningGoal[]>([])
@@ -362,8 +363,9 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* 右栏：全局笔记本（sticky 悬浮） */}
-        <div className="lg:sticky lg:top-4 mt-5 lg:mt-0">
+        {/* 右栏：待办清单 + 全局笔记本 */}
+        <div className="lg:sticky lg:top-4 mt-5 lg:mt-0 space-y-4">
+          <TodoList />
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-lg overflow-hidden">
             <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-50 dark:border-slate-800">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 flex items-center justify-center">

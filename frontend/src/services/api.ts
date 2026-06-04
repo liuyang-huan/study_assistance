@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQuestion, LearningStats, Note, GlobalNote, BookImport, TocEntry, BookSection, DocumentImportResult } from '../types'
+import type { LearningGoal, GoalDetail, Roadmap, DailyPlan, JournalEntry, DailyQuestion, LearningStats, Note, GlobalNote, TodoTask, BookImport, TocEntry, BookSection, DocumentImportResult } from '../types'
 
 const http = axios.create({ baseURL: '/api', timeout: 90000 })
 
@@ -163,3 +163,13 @@ export const updateGlobalNote = (noteId: number, content: string) =>
   http.put<GlobalNote>(`/notes/${noteId}`, { content }).then(r => r.data)
 export const deleteGlobalNote = (noteId: number) =>
   http.delete(`/notes/${noteId}`)
+
+// 待办事项
+export const getTodos = (status?: string) =>
+  http.get<TodoTask[]>('/todos', { params: status ? { status } : {} }).then(r => r.data)
+export const createTodo = (data: { title: string; description?: string; deadline?: string | null }) =>
+  http.post<TodoTask>('/todos', data).then(r => r.data)
+export const updateTodo = (todoId: number, data: { title?: string; description?: string; deadline?: string | null; completed?: boolean }) =>
+  http.put<TodoTask>(`/todos/${todoId}`, data).then(r => r.data)
+export const deleteTodo = (todoId: number) =>
+  http.delete(`/todos/${todoId}`)

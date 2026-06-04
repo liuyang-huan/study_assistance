@@ -8,5 +8,6 @@ from .content_cache import ContentCache
 from .note import UserNote
 from .book_import import BookImport, BookSection
 from .global_note import GlobalNote
+from .todo import TodoTask
 
-__all__ = ['LearningGoal', 'Roadmap', 'JournalEntry', 'DailyQuestion', 'UserAnswer', 'DailyPlan', 'LearnedTopic', 'ContentCache', 'UserNote', 'BookImport', 'BookSection', 'GlobalNote']
+__all__ = ['LearningGoal', 'Roadmap', 'JournalEntry', 'DailyQuestion', 'UserAnswer', 'DailyPlan', 'LearnedTopic', 'ContentCache', 'UserNote', 'BookImport', 'BookSection', 'GlobalNote', 'TodoTask']

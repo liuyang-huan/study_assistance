@@ -209,3 +209,28 @@ class BookSectionResponse(BaseModel):
     topic_day: int | None = None
     translated_title: str | None = None
     translated_content: str | None = None
+
+
+# --- 待办事项 ---
+class TodoCreate(BaseModel):
+    title: str
+    description: str = ''
+    deadline: date | None = None
+
+
+class TodoUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    deadline: date | None = None
+    completed: bool | None = None
+
+
+class TodoResponse(BaseModel):
+    id: int
+    title: str
+    description: str | None
+    deadline: date | None
+    completed: bool
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime

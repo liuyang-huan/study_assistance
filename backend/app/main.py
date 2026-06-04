@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .database import engine, Base
-from .routers import goals, roadmap, journal, questions, plans, stats, export, chat, progress, notes, upload, documents, global_notes
+from .routers import goals, roadmap, journal, questions, plans, stats, export, chat, progress, notes, upload, documents, global_notes, todos
 
 # 自动建表
 Base.metadata.create_all(bind=engine)
@@ -93,6 +93,7 @@ app.include_router(upload.router)
 app.include_router(documents.router)
 app.include_router(documents.import_router)
 app.include_router(global_notes.router)
+app.include_router(todos.router)
 
 _uploads_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'uploads')
 os.makedirs(_uploads_dir, exist_ok=True)
